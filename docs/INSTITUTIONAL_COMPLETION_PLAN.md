@@ -115,10 +115,9 @@ The institutional completion branch now includes:
 - `modules/access_control.py` defines the staff-role policy and additive migration helpers.
 - `modules/eligibility.py` with independently approved, versioned policy evaluation.
 - `modules/appeals.py` with student-initiated appeals and independent review safeguards.
+- `modules/identity_check.py` with session-scoped candidate review and preview-only camera interface.
 - Append-only academic history in the institutional registry.
 - Administrator staff provisioning, updated staff login and role-specific navigation.
-- New tests for role migration, eligibility decisions and append-only history.
+- New tests for role migration, staff authentication, eligibility decisions, appeals, identity scope and append-only history.
 
-These are development increments. They do not establish institutional policy approval, production authorization or full end-to-end readiness.
-
-- Session-scoped camera preview interface added; live face matching remains disabled because Kisii University has not selected an approved provider.
+These are development increments. They do not establish institutional policy approval, production authorization or full end-to-end readiness. Live face matching remains disabled because Kisii University has not selected an approved provider.
