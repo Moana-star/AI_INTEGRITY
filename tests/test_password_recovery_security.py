@@ -16,6 +16,20 @@ class PasswordRecoverySecurityTests(unittest.TestCase):
         self.assertIsNotNone(match, "shared layout must render a CSRF token")
         return match.group(1).decode("utf-8")
 
+    def test_health_endpoint_reports_database_readiness_without_details(self):
+        import sqlite3
+        with patch.object(application, "get_db_connection", return_value=sqlite3.connect(":memory:")):
+            response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"status": "ok"})
+
+    def test_health_endpoint_returns_unavailable_when_database_fails(self):
+        with patch.object(application, "get_db_connection", side_effect=RuntimeError("private connection detail")):
+            response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json(), {"status": "unavailable"})
+        self.assertNotIn(b"private connection detail", response.data)
+
     def test_state_changing_request_without_csrf_token_is_rejected(self):
         response = self.client.post("/forgot-password", data={"username": "admin"})
         self.assertEqual(response.status_code, 400)
