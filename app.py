@@ -15,6 +15,8 @@ from modules.identity_check import identity_bp
 from modules.access_control import (STAFF_ROLES, effective_user_role, ensure_role_schema, legacy_role_for)
 
 app = Flask(__name__)
+if os.environ.get("FLASK_ENV") == "production":
+    raise RuntimeError("Production startup is blocked: the application still uses SQLite directly. Complete and verify the PostgreSQL adapter and migration before production deployment.")
 if os.environ.get("FLASK_ENV") == "production" and not os.environ.get("FLASK_SECRET_KEY"):
     raise RuntimeError("FLASK_SECRET_KEY must be configured for production.")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
@@ -25,7 +27,7 @@ if os.environ.get("FLASK_ENV") == "production" and not rate_limit_storage:
 app.config["RATELIMIT_STORAGE_URI"] = rate_limit_storage or "memory://"
 limiter.init_app(app)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
-                  SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "0") == "1",
+                  SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "1" if os.environ.get("FLASK_ENV") == "production" else "0") == "1",
                   MAX_CONTENT_LENGTH=6 * 1024 * 1024)
 
 app.register_blueprint(registry_bp)
@@ -35,6 +37,18 @@ app.register_blueprint(student_bp)
 app.register_blueprint(eligibility_bp)
 app.register_blueprint(appeals_bp)
 app.register_blueprint(identity_bp)
+
+
+@app.after_request
+def apply_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+    if os.environ.get("FLASK_ENV") == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
 
 DATABASE = os.path.join(os.path.dirname(__file__), "database", "exam_integrity.db")
 
