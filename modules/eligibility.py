@@ -65,6 +65,36 @@ def ensure_schema():
         );
         CREATE INDEX IF NOT EXISTS idx_eligibility_decisions_student
             ON eligibility_decisions(student_id, evaluated_at DESC);
+        CREATE TABLE IF NOT EXISTS eligibility_evidence_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            unit_id INTEGER NOT NULL,
+            academic_year TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            lectures_total INTEGER NOT NULL,
+            lectures_attended INTEGER NOT NULL,
+            cats_required INTEGER NOT NULL,
+            cats_sat INTEGER NOT NULL,
+            fees_cleared INTEGER NOT NULL,
+            evidence_reference TEXT NOT NULL,
+            recorded_by INTEGER NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(unit_id) REFERENCES academic_units(id),
+            FOREIGN KEY(recorded_by) REFERENCES users(id)
+        );
+        CREATE TRIGGER IF NOT EXISTS eligibility_evidence_history_no_update
+        BEFORE UPDATE ON eligibility_evidence_history
+        BEGIN SELECT RAISE(ABORT, 'Eligibility evidence history is append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS eligibility_evidence_history_no_delete
+        BEFORE DELETE ON eligibility_evidence_history
+        BEGIN SELECT RAISE(ABORT, 'Eligibility evidence history is append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS eligibility_decisions_no_update
+        BEFORE UPDATE ON eligibility_decisions
+        BEGIN SELECT RAISE(ABORT, 'Eligibility decisions are append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS eligibility_decisions_no_delete
+        BEFORE DELETE ON eligibility_decisions
+        BEGIN SELECT RAISE(ABORT, 'Eligibility decisions are append-only'); END;
         CREATE TABLE IF NOT EXISTS eligibility_evidence (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER NOT NULL,
@@ -337,6 +367,13 @@ def record_evidence():
     if not connection.execute("SELECT 1 FROM students WHERE id=?", (student_id,)).fetchone() or not connection.execute("SELECT 1 FROM academic_units WHERE id=?", (unit_id,)).fetchone():
         connection.close()
         abort(404)
+    connection.execute("""
+        INSERT INTO eligibility_evidence_history
+            (student_id,unit_id,academic_year,semester,lectures_total,lectures_attended,
+             cats_required,cats_sat,fees_cleared,evidence_reference,recorded_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+    """, (student_id,unit_id,year,semester,lectures_total,lectures_attended,
+          cats_required,cats_sat,int(fees_cleared),reference,session["user_id"]))
     connection.execute("""
         INSERT INTO eligibility_evidence
             (student_id,unit_id,academic_year,semester,lectures_total,lectures_attended,
