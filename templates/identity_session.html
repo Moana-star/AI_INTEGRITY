@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Session Identity Review | EIMS{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Invigilator station · identity review</p><h1>{{ exam_session.course_code }} · Candidate identity</h1><p class="page-subtitle">{{ exam_session.examination_name }} · {{ exam_session.session_date }} · {{ exam_session.start_time }}–{{ exam_session.end_time }} · {{ exam_session.session_code }}</p></div><a class="btn btn-ghost" href="{{ url_for('operations.attendance', session_id=exam_session.id) }}">Back to attendance</a></header>
+<section class="panel"><h2>Camera preview (optional)</h2>
+<div class="notice notice-warning"><strong>Preview only:</strong> no facial recognition is active. This page does not capture, upload, compare, template or store face images. A camera preview is not proof of identity, eligibility or attendance. Use the institution-approved manual identity process.</div>
+<div class="camera-preview-shell"><video id="identity-camera-preview" autoplay muted playsinline aria-label="Live camera preview"></video><div id="identity-camera-placeholder">Camera is off. Start preview only when needed.</div></div>
+<div class="quick-actions"><button class="btn btn-primary" type="button" id="identity-camera-start">Start camera preview</button><button class="btn btn-ghost" type="button" id="identity-camera-stop" disabled>Stop camera</button></div>
+<p id="identity-camera-status" class="field-hint" role="status" aria-live="polite">No camera access requested.</p>
+</section>
+<section class="panel"><h2>Registered candidates</h2><p class="field-hint">This list contains only candidates assigned to this examination session. Compare the admission number and student card using the institution's authorized procedure.</p>
+<form method="get" class="registry-search"><label for="q">Find a candidate</label><div class="quick-actions"><input id="q" name="q" value="{{ query }}" placeholder="Admission number or student name"><button class="btn btn-primary" type="submit">Search</button>{% if query %}<a class="btn btn-ghost" href="{{ url_for('identity.session_identity',session_id=exam_session.id) }}">Clear</a>{% endif %}</div></form>
+<div class="table-wrap"><table class="data-table"><thead><tr><th>Admission number</th><th>Candidate</th><th>Seat</th><th>Eligibility</th><th>Academic status</th><th>Attendance</th></tr></thead><tbody>
+{% for s in candidates %}<tr><td><strong>{{ s.student_number }}</strong></td><td>{{ s.first_name }} {{ s.last_name }}</td><td>{{ s.seat_label or 'Not assigned' }}</td><td>{{ s.eligibility_status|title }}</td><td>{{ s.academic_status|title }}</td><td>{{ s.attendance_status or 'Not recorded' }}</td></tr>{% else %}<tr><td colspan="6">No matching candidates are assigned to this session.</td></tr>{% endfor %}
+</tbody></table></div></section>
+<script src="{{ url_for('static',filename='js/camera_preview.js') }}" defer></script>
+{% endblock %}
