@@ -115,7 +115,7 @@ class EligibilityPolicyTests(unittest.TestCase):
         connection.close()
         self.assertEqual(result,"eligible")
         self.assertIsNotNone(policy)
-        self.assertIn("All conditions",reasons[0])
+        self.assertIn("satisfied",reasons[0])
 
     def test_eligibility_decision_updates_only_scheduled_session_candidates(self):
         self.add_policy()
