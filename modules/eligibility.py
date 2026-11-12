@@ -203,59 +203,6 @@ def apply_decision_to_scheduled_candidates(connection, student_id, unit_id,
     return cursor.rowcount
 
 
-def evaluate(connection, student_id, unit_id, academic_year, semester, actor_id):
-    today = date.today().isoformat()
-    policy = connection.execute("""
-        SELECT * FROM eligibility_policies
-        WHERE approval_status='approved' AND effective_from<=?
-          AND (effective_to IS NULL OR effective_to>=?)
-        ORDER BY effective_from DESC, version DESC LIMIT 1
-    """, (today, today)).fetchone()
-    reasons = []
-    result = "pending"
-    if policy is None:
-        reasons.append("No currently effective, institution-approved eligibility policy is configured.")
-    else:
-        rules = validate_rules(json.loads(policy["rules_json"]))
-        student = connection.execute("""
-            SELECT s.id, COALESCE(p.academic_status,'active') AS academic_status
-            FROM students s LEFT JOIN student_profiles p ON p.student_id=s.id
-            WHERE s.id=?
-        """, (student_id,)).fetchone()
-        unit = connection.execute("SELECT id, active FROM academic_units WHERE id=?", (unit_id,)).fetchone()
-        if not student or not unit:
-            result = "pending"
-            reasons.append("Student or academic unit could not be verified against the institutional registry.")
-        else:
-            failures = []
-            if not unit["active"]:
-                failures.append("The academic unit is inactive.")
-            if rules["require_active_student"] and student["academic_status"] != "active":
-                failures.append("The student's academic status is not active.")
-            if rules["require_registered_unit"]:
-                enrolment = connection.execute("""
-                    SELECT 1 FROM student_unit_enrolments
-                    WHERE student_id=? AND unit_id=? AND academic_year=?
-                      AND semester=? AND enrolment_status='registered'
-                """, (student_id, unit_id, academic_year, semester)).fetchone()
-                if not enrolment:
-                    failures.append("No registered enrolment exists for this unit, academic year and semester.")
-            if failures:
-                result = "ineligible"
-                reasons.extend(failures)
-            else:
-                result = "eligible"
-                reasons.append("All conditions in the approved policy version were satisfied.")
-    cursor = connection.execute("""
-        INSERT INTO eligibility_decisions
-            (student_id,unit_id,academic_year,semester,policy_id,result,reasons_json,evaluated_by)
-        VALUES (?,?,?,?,?,?,?,?)
-    """, (student_id, unit_id, academic_year, semester,
-          policy["id"] if policy else None, result,
-          json.dumps(reasons, ensure_ascii=False), actor_id))
-    return cursor.lastrowid, result, reasons, policy
-
-
 @eligibility_bp.before_request
 def authorize():
     if "user_id" not in session or session.get("role") not in {"admin", "registrar", "examination_officer"}:
