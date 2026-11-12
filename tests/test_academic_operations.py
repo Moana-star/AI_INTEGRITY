@@ -106,7 +106,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         self.assertEqual(response.headers.get("Cache-Control"), "no-store, private")
 
     def test_registrar_cannot_view_or_record_exam_attendance(self):
-        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
+        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret", WTF_CSRF_ENABLED=False)
         client = flask_app.test_client()
         with client.session_transaction() as browser_session:
             browser_session["user_id"] = 1
