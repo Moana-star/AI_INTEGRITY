@@ -34,6 +34,7 @@ def ensure_schema():
             version INTEGER NOT NULL CHECK(version > 0),
             effective_from TEXT NOT NULL,
             effective_to TEXT,
+            source_reference TEXT,
             rules_json TEXT NOT NULL,
             approval_status TEXT NOT NULL DEFAULT 'draft'
                 CHECK(approval_status IN ('draft','approved','retired')),
@@ -65,6 +66,9 @@ def ensure_schema():
         CREATE INDEX IF NOT EXISTS idx_eligibility_decisions_student
             ON eligibility_decisions(student_id, evaluated_at DESC);
     """)
+    policy_columns = {row[1] for row in connection.execute("PRAGMA table_info(eligibility_policies)")}
+    if "source_reference" not in policy_columns:
+        connection.execute("ALTER TABLE eligibility_policies ADD COLUMN source_reference TEXT")
     connection.commit()
     connection.close()
 
@@ -185,9 +189,9 @@ def create_policy():
     try:
         connection.execute("""
             INSERT INTO eligibility_policies
-                (policy_code,version,effective_from,rules_json,created_by)
-            VALUES (?,?,?,?,?)
-        """, (code,version,effective_from,json.dumps(rules),session["user_id"]))
+                (policy_code,version,effective_from,source_reference,rules_json,created_by)
+            VALUES (?,?,?,?,?,?)
+        """, (code,version,effective_from,reason,json.dumps(rules),session["user_id"]))
         policy_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
         connection.execute("""INSERT INTO audit_events
             (actor_user_id,action,entity_type,entity_id,summary)
