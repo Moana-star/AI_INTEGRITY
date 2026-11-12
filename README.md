@@ -73,9 +73,17 @@ AI_INTEGRITY/
 ├── requirements.txt          # Python dependency declaration
 ├── database/
 │   └── database.py           # SQLite schema and demo-data seeding
+├── modules/
+│   └── institutional_registry.py # Institutional student registry blueprint
 ├── docs/
 │   ├── ARCHITECTURE.md       # Architecture notes
-│   └── TESTING.md            # Manual verification checklist
+│   ├── DATA_GOVERNANCE.md    # Privacy and biometric safeguards
+│   ├── INSTITUTIONAL_ROADMAP.md # Phased institutional development
+│   └── TESTING.md            # Automated and manual test guidance
+├── tests/
+│   └── test_institutional_registry.py
+├── .github/workflows/
+│   └── tests.yml             # Python test workflow
 ├── static/
 │   ├── css/style.css
 │   └── js/auth.js
