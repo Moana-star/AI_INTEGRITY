@@ -65,6 +65,25 @@ def ensure_schema():
         );
         CREATE INDEX IF NOT EXISTS idx_eligibility_decisions_student
             ON eligibility_decisions(student_id, evaluated_at DESC);
+        CREATE TABLE IF NOT EXISTS eligibility_evidence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            unit_id INTEGER NOT NULL,
+            academic_year TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            lectures_total INTEGER NOT NULL CHECK(lectures_total >= 0),
+            lectures_attended INTEGER NOT NULL CHECK(lectures_attended >= 0 AND lectures_attended <= lectures_total),
+            cats_required INTEGER NOT NULL CHECK(cats_required >= 0),
+            cats_sat INTEGER NOT NULL CHECK(cats_sat >= 0 AND cats_sat <= cats_required),
+            fees_cleared INTEGER NOT NULL CHECK(fees_cleared IN (0,1)),
+            evidence_reference TEXT NOT NULL,
+            verified_by INTEGER NOT NULL,
+            verified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(student_id,unit_id,academic_year,semester),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(unit_id) REFERENCES academic_units(id),
+            FOREIGN KEY(verified_by) REFERENCES users(id)
+        );
     """)
     policy_columns = {row[1] for row in connection.execute("PRAGMA table_info(eligibility_policies)")}
     if "source_reference" not in policy_columns:
@@ -74,13 +93,92 @@ def ensure_schema():
 
 
 def validate_rules(rules):
-    if not isinstance(rules, dict) or set(rules) != {
-        "require_active_student", "require_registered_unit"
-    }:
-        raise ValueError("Only supported, explicit eligibility rules can be configured.")
-    if any(type(value) is not bool for value in rules.values()):
-        raise ValueError("Eligibility rule values must be true or false.")
+    required = {
+        "require_active_student", "require_registered_unit",
+        "require_fee_clearance", "minimum_attendance_percentage",
+        "minimum_cats_required"
+    }
+    if not isinstance(rules, dict) or set(rules) != required:
+        raise ValueError("Eligibility policy must define the complete Kisii University examination rule set.")
+    for key in ("require_active_student", "require_registered_unit", "require_fee_clearance"):
+        if type(rules[key]) is not bool or not rules[key]:
+            raise ValueError(f"The approved Kisii University policy must enforce {key}.")
+    if type(rules["minimum_attendance_percentage"]) not in (int, float) or not 0 <= rules["minimum_attendance_percentage"] <= 100:
+        raise ValueError("Minimum lecture attendance must be between 0 and 100 percent.")
+    if type(rules["minimum_cats_required"]) is not int or not 1 <= rules["minimum_cats_required"] <= 20:
+        raise ValueError("Minimum CAT count must be between 1 and 20.")
     return rules
+
+
+def evaluate(connection, student_id, unit_id, academic_year, semester, actor_id):
+    today = date.today().isoformat()
+    policy = connection.execute("""
+        SELECT * FROM eligibility_policies
+        WHERE approval_status='approved' AND effective_from<=?
+          AND (effective_to IS NULL OR effective_to>=?)
+        ORDER BY effective_from DESC, version DESC LIMIT 1
+    """, (today, today)).fetchone()
+    reasons = []
+    result = "pending"
+    if policy is None:
+        reasons.append("No currently effective, institution-approved eligibility policy is configured.")
+    else:
+        rules = validate_rules(json.loads(policy["rules_json"]))
+        student = connection.execute("""
+            SELECT s.id, COALESCE(p.academic_status,'active') AS academic_status
+            FROM students s LEFT JOIN student_profiles p ON p.student_id=s.id
+            WHERE s.id=?
+        """, (student_id,)).fetchone()
+        unit = connection.execute("SELECT id, active FROM academic_units WHERE id=?", (unit_id,)).fetchone()
+        enrolment = connection.execute("""
+            SELECT 1 FROM student_unit_enrolments
+            WHERE student_id=? AND unit_id=? AND academic_year=?
+              AND semester=? AND enrolment_status='registered'
+        """, (student_id, unit_id, academic_year, semester)).fetchone()
+        evidence = connection.execute("""
+            SELECT * FROM eligibility_evidence
+            WHERE student_id=? AND unit_id=? AND academic_year=? AND semester=?
+        """, (student_id, unit_id, academic_year, semester)).fetchone()
+        if not student or not unit:
+            reasons.append("Student or academic unit could not be verified against the institutional registry.")
+        elif not unit["active"]:
+            result = "ineligible"
+            reasons.append("The academic unit is inactive.")
+        elif rules["require_active_student"] and student["academic_status"] != "active":
+            result = "ineligible"
+            reasons.append("The student's academic status is not active.")
+        elif rules["require_registered_unit"] and not enrolment:
+            result = "ineligible"
+            reasons.append("No registered enrolment exists for this unit, academic year and semester.")
+        elif not evidence:
+            reasons.append("Verified course-level fee, lecture-attendance and CAT evidence has not been recorded.")
+        else:
+            failures = []
+            attendance_pct = (100.0 * evidence["lectures_attended"] / evidence["lectures_total"]) if evidence["lectures_total"] else 0.0
+            if rules["require_fee_clearance"] and not evidence["fees_cleared"]:
+                failures.append("Fee-clearance evidence indicates outstanding fees.")
+            if attendance_pct < rules["minimum_attendance_percentage"]:
+                failures.append(f"Lecture attendance is {attendance_pct:.1f}%; the approved minimum is {rules['minimum_attendance_percentage']}%.")
+            if evidence["cats_required"] < rules["minimum_cats_required"]:
+                failures.append("The recorded course assessment plan does not meet the policy's minimum CAT count.")
+            if evidence["cats_sat"] < rules["minimum_cats_required"]:
+                failures.append(f"Only {evidence['cats_sat']} of the required CATs were sat.")
+            if failures:
+                result = "ineligible"
+                reasons.extend(failures)
+            else:
+                result = "eligible"
+                reasons.append(
+                    f"Approved policy {policy['policy_code']} v{policy['version']} satisfied: registered unit, active status, fee clearance, {attendance_pct:.1f}% lecture attendance and {evidence['cats_sat']} CATs sat."
+                )
+    cursor = connection.execute("""
+        INSERT INTO eligibility_decisions
+            (student_id,unit_id,academic_year,semester,policy_id,result,reasons_json,evaluated_by)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, (student_id, unit_id, academic_year, semester,
+          policy["id"] if policy else None, result,
+          json.dumps(reasons, ensure_ascii=False), actor_id))
+    return cursor.lastrowid, result, reasons, policy
 
 
 def apply_decision_to_scheduled_candidates(connection, student_id, unit_id,
@@ -154,7 +252,7 @@ def evaluate(connection, student_id, unit_id, academic_year, semester, actor_id)
 
 @eligibility_bp.before_request
 def authorize():
-    if "user_id" not in session or session.get("role") not in {"admin", "examination_officer"}:
+    if "user_id" not in session or session.get("role") not in {"admin", "registrar", "examination_officer"}:
         abort(403)
     ensure_registry_schema()
     ensure_operations_schema()
@@ -194,12 +292,19 @@ def create_policy():
     except (TypeError, ValueError):
         flash("Enter a positive version and valid effective date.", "error")
         return redirect(url_for("eligibility.workspace"))
-    rules = {
-        "require_active_student": request.form.get("require_active_student") == "on",
-        "require_registered_unit": request.form.get("require_registered_unit") == "on",
-    }
-    if not code or len(code) > 60 or version < 1 or len(reason) < 10 or not all(rules.values()):
-        flash("Provide a policy code, positive version, official policy/source reference, and both active-student and registered-unit checks.", "error")
+    try:
+        rules = validate_rules({
+            "require_active_student": request.form.get("require_active_student") == "on",
+            "require_registered_unit": request.form.get("require_registered_unit") == "on",
+            "require_fee_clearance": request.form.get("require_fee_clearance") == "on",
+            "minimum_attendance_percentage": float(request.form.get("minimum_attendance_percentage", "80")),
+            "minimum_cats_required": int(request.form.get("minimum_cats_required", "2")),
+        })
+    except (ValueError, TypeError) as error:
+        flash(str(error), "error")
+        return redirect(url_for("eligibility.workspace"))
+    if not code or len(code) > 60 or version < 1 or len(reason) < 10:
+        flash("Provide a policy code, positive version and official policy/source reference.", "error")
         return redirect(url_for("eligibility.workspace"))
     connection = db()
     try:
@@ -251,6 +356,54 @@ def approve_policy(policy_id):
     connection.commit()
     connection.close()
     flash("Eligibility policy approved with independent administrator review.", "success")
+    return redirect(url_for("eligibility.workspace"))
+
+
+@eligibility_bp.post("/evidence")
+def record_evidence():
+    if session.get("role") not in {"admin", "registrar", "examination_officer"}:
+        abort(403)
+    try:
+        student_id = int(request.form.get("student_id", ""))
+        unit_id = int(request.form.get("unit_id", ""))
+        lectures_total = int(request.form.get("lectures_total", ""))
+        lectures_attended = int(request.form.get("lectures_attended", ""))
+        cats_required = int(request.form.get("cats_required", ""))
+        cats_sat = int(request.form.get("cats_sat", ""))
+    except (TypeError, ValueError):
+        flash("Enter valid whole-number attendance and CAT evidence.", "error")
+        return redirect(url_for("eligibility.workspace"))
+    year = " ".join((request.form.get("academic_year") or "").split())[:20]
+    semester = " ".join((request.form.get("semester") or "").split())[:40]
+    reference = " ".join((request.form.get("evidence_reference") or "").split())[:500]
+    fees_cleared = request.form.get("fees_cleared") == "yes"
+    if not year or not semester or len(reference) < 8 or lectures_total < 1 or not 0 <= lectures_attended <= lectures_total or not 1 <= cats_required <= 20 or not 0 <= cats_sat <= cats_required:
+        flash("Evidence must include a source reference, valid lecture counts and CAT counts.", "error")
+        return redirect(url_for("eligibility.workspace"))
+    connection = db()
+    if not connection.execute("SELECT 1 FROM students WHERE id=?", (student_id,)).fetchone() or not connection.execute("SELECT 1 FROM academic_units WHERE id=?", (unit_id,)).fetchone():
+        connection.close()
+        abort(404)
+    connection.execute("""
+        INSERT INTO eligibility_evidence
+            (student_id,unit_id,academic_year,semester,lectures_total,lectures_attended,
+             cats_required,cats_sat,fees_cleared,evidence_reference,verified_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(student_id,unit_id,academic_year,semester) DO UPDATE SET
+            lectures_total=excluded.lectures_total, lectures_attended=excluded.lectures_attended,
+            cats_required=excluded.cats_required, cats_sat=excluded.cats_sat,
+            fees_cleared=excluded.fees_cleared, evidence_reference=excluded.evidence_reference,
+            verified_by=excluded.verified_by, verified_at=CURRENT_TIMESTAMP
+    """, (student_id,unit_id,year,semester,lectures_total,lectures_attended,
+          cats_required,cats_sat,int(fees_cleared),reference,session["user_id"]))
+    connection.execute("""
+        INSERT INTO audit_events(actor_user_id,action,entity_type,entity_id,summary)
+        VALUES(?,'record_evidence','eligibility_evidence',?,?)
+    """, (session["user_id"],f"{student_id}:{unit_id}:{year}:{semester}",
+          "Recorded source-referenced fee, lecture attendance and CAT evidence; re-evaluation is required."))
+    connection.commit()
+    connection.close()
+    flash("Eligibility evidence saved. Re-evaluate the candidate to produce a new policy decision.", "success")
     return redirect(url_for("eligibility.workspace"))
 
 
