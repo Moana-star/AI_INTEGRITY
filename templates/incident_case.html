@@ -18,5 +18,6 @@
 <label>Evidence description<input name="description" maxlength="500" required placeholder="Describe what this file contains and who collected it."></label>
 <button class="button button-primary" type="submit">Upload evidence</button></form>
 </section>
+<section class="panel" style="margin-top:20px"><h2>Student response</h2>{% if student_response %}<p>{{ student_response.response_text }}</p><small>Submitted {{ student_response.submitted_at }}</small>{% else %}<p class="muted">No student response has been submitted.</p>{% endif %}</section>
 <section class="panel" style="margin-top:20px"><h2>Review history</h2>{% for event in events %}<article class="timeline-item"><p><strong>{{ (event.from_status or 'Initial')|replace('_',' ')|title }} → {{ event.to_status|replace('_',' ')|title }}</strong></p><p>{{ event.review_note }}</p><small>{{ event.username }} · {{ event.created_at }}</small></article>{% else %}<p class="empty-state">No review actions have been recorded.</p>{% endfor %}</section>
 {% endblock %}
