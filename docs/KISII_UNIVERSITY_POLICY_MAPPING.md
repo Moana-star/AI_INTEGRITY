@@ -51,6 +51,8 @@ The Kenya Law page explicitly warns that the displayed 2020 Legal Notice version
 - Registrar, administrator or examination-officer evidence entry for total/attended lectures, CATs required/sat and fee-clearance status, with a source reference and verifying staff account.
 - Missing evidence remains pending. Explicit failed requirements return an explainable ineligible result.
 - The engine applies a decision only to scheduled sessions; it does not rewrite completed examination records.
+- Added an annual progression/supplementary review calculator and auditable register: up to 25% failed courses can be marked supplementary-eligible only when fee evidence is recorded; over 25% and up to 50% returns repeat-year review; above 50% returns a discontinuation-review-required flag. Failed supplementary courses return a repeat-failed-courses pathway.
+- These pathway results are recommendations for Registrar/Senate review only. They never automatically change academic status or discontinue a student.
 - Newly created policy drafts prefill 80% attendance and two CATs from the 2019 handbook, but the policy is not pre-approved. A second administrator must independently approve it before it can be used.
 - Session activation now requires an active venue within capacity and at least two active invigilators.
 - A separate Senate verdict register records the communication date and enables a student to submit a review request within 21 calendar days. This is distinct from an ordinary incident appeal.
@@ -60,7 +62,7 @@ The Kenya Law page explicitly warns that the displayed 2020 Legal Notice version
 
 - Finance/SIS integration and independently reconciled fee status.
 - Authoritative lecture and CAT attendance feeds.
-- Annual course-result aggregation for supplementary eligibility and progression thresholds.
+- Integration with authoritative annual course-result feeds; current pathway calculation uses source-referenced counts entered by authorized staff.
 - Special-examination authorization and evidence workflow.
 - Senate review workflow with a verified 21-day communicated-decision deadline.
 - Programme-level CAT weighting and grading policy.
