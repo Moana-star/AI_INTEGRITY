@@ -1,4 +1,5 @@
 v/
+venv/
 __pycache__/
 *.py[cod]
 .env
@@ -6,8 +7,9 @@ __pycache__/
 !.env.example
 .vscode/
 .pytest_cache/
-*.log
+.mypy_cache/
 instance/
+*.log
 database/*.db
 database/*.sqlite
 database/*.sqlite3
