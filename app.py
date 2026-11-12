@@ -17,13 +17,9 @@ from modules.access_control import (STAFF_ROLES, effective_user_role, ensure_rol
 app = Flask(__name__)
 if os.environ.get("FLASK_ENV") == "production":
     raise RuntimeError("Production startup is blocked: the application still uses SQLite directly. Complete and verify the PostgreSQL adapter and migration before production deployment.")
-if os.environ.get("FLASK_ENV") == "production" and not os.environ.get("FLASK_SECRET_KEY"):
-    raise RuntimeError("FLASK_SECRET_KEY must be configured for production.")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 CSRFProtect(app)
 rate_limit_storage = os.environ.get("RATELIMIT_STORAGE_URI")
-if os.environ.get("FLASK_ENV") == "production" and not rate_limit_storage:
-    raise RuntimeError("RATELIMIT_STORAGE_URI must point to shared Redis-compatible storage in production.")
 app.config["RATELIMIT_STORAGE_URI"] = rate_limit_storage or "memory://"
 limiter.init_app(app)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
