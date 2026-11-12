@@ -316,9 +316,15 @@ def workspace():
         JOIN academic_units u ON u.id=d.unit_id
         ORDER BY d.evaluated_at DESC LIMIT 50
     """).fetchall()
+    progression_reviews = connection.execute("""
+        SELECT r.*,s.student_number,s.first_name,s.last_name
+        FROM annual_progression_reviews r JOIN students s ON s.id=r.student_id
+        ORDER BY r.evaluated_at DESC LIMIT 50
+    """).fetchall()
     connection.close()
     return render_template("eligibility_workspace.html", policies=policies,
-                           students=students, units=units, decisions=decisions)
+                           students=students, units=units, decisions=decisions,
+                           progression_reviews=progression_reviews)
 
 
 @eligibility_bp.post("/policies")
