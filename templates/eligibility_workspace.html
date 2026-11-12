@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Examination Eligibility | EIMS{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Kisii University · Examination Office</p><h1>Eligibility policy and decisions</h1><p class="page-subtitle">Versioned rules, independent approval and explainable student-by-unit decisions.</p></div></header>
+<section class="panel"><h2>Create policy draft</h2><p class="field-hint">Only configure rules supported by an approved university policy. This first engine supports active academic status and registered unit enrolment; it does not infer fee clearance, progression thresholds or other requirements.</p>
+<form method="post" action="{{ url_for('eligibility.create_policy') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="form-grid">
+<label>Policy code<input name="policy_code" maxlength="60" placeholder="e.g. EXAM-ELIGIBILITY" required></label>
+<label>Version<input name="version" type="number" min="1" required></label>
+<label>Effective from<input name="effective_from" type="date" required></label>
+<label class="form-grid-full">Official policy reference / source<input name="source_reference" minlength="10" maxlength="500" placeholder="Approved policy title, section and approval reference" required></label>
+</div>
+<p><label><input type="checkbox" name="require_active_student" checked required> Require active academic status</label></p>
+<p><label><input type="checkbox" name="require_registered_unit" checked required> Require registered enrolment in the selected unit and semester</label></p>
+<button class="btn btn-primary" type="submit">Save policy draft</button>
+</form></section>
+<section class="panel"><h2>Policy register</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Policy</th><th>Version</th><th>Effective from</th><th>Status</th><th>Created by</th><th>Approved by</th><th>Action</th></tr></thead><tbody>
+{% for p in policies %}<tr><td>{{ p.policy_code }}</td><td>{{ p.version }}</td><td>{{ p.effective_from }}</td><td>{{ p.approval_status|capitalize }}</td><td>{{ p.creator }}</td><td>{{ p.approver or '—' }}</td><td>{% if session.get('role') == 'admin' and p.approval_status == 'draft' and p.created_by != session.get('user_id') %}<form method="post" action="{{ url_for('eligibility.approve_policy', policy_id=p.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="approval_reason" minlength="10" maxlength="500" placeholder="Independent approval reason" required><button class="btn btn-sm btn-primary" type="submit">Approve</button></form>{% else %}—{% endif %}</td></tr>
+{% else %}<tr><td colspan="7">No eligibility policies have been configured.</td></tr>{% endfor %}
+</tbody></table></div></section>
+<section class="panel"><h2>Evaluate a candidate</h2><p class="field-hint">Until an effective policy has been independently approved, evaluations are recorded as pending. A pending result is not an exam clearance decision.</p>
+<form method="post" action="{{ url_for('eligibility.evaluate_candidate') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="form-grid">
+<label>Student<select name="student_id" required><option value="">Choose student</option>{% for s in students %}<option value="{{ s.id }}">{{ s.student_number }} · {{ s.first_name }} {{ s.last_name }}</option>{% endfor %}</select></label>
+<label>Academic unit<select name="unit_id" required><option value="">Choose unit</option>{% for u in units %}<option value="{{ u.id }}">{{ u.unit_code }} · {{ u.unit_name }}</option>{% endfor %}</select></label>
+<label>Academic year<input name="academic_year" maxlength="20" placeholder="e.g. 2026/2027" required></label>
+<label>Semester<input name="semester" maxlength="40" placeholder="e.g. Semester 1" required></label>
+</div><button class="btn btn-primary" type="submit">Evaluate eligibility</button>
+</form></section>
+<section class="panel"><h2>Recent decisions</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Student</th><th>Unit</th><th>Academic year</th><th>Semester</th><th>Result</th><th>Recorded</th></tr></thead><tbody>
+{% for d in decisions %}<tr><td>{{ d.student_number }}</td><td>{{ d.unit_code }}</td><td>{{ d.academic_year }}</td><td>{{ d.semester }}</td><td>{{ d.result|capitalize }}</td><td>{{ d.evaluated_at }}</td></tr>{% else %}<tr><td colspan="6">No eligibility evaluations recorded.</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}
