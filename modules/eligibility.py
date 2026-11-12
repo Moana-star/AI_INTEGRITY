@@ -65,6 +65,28 @@ def ensure_schema():
         );
         CREATE INDEX IF NOT EXISTS idx_eligibility_decisions_student
             ON eligibility_decisions(student_id, evaluated_at DESC);
+        CREATE TABLE IF NOT EXISTS annual_progression_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            academic_year TEXT NOT NULL,
+            total_courses INTEGER NOT NULL,
+            failed_courses INTEGER NOT NULL,
+            supplementary_failed_courses INTEGER NOT NULL DEFAULT 0,
+            supplementary_fee_paid INTEGER NOT NULL CHECK(supplementary_fee_paid IN (0,1)),
+            pathway TEXT NOT NULL,
+            failed_percentage REAL NOT NULL,
+            source_reference TEXT NOT NULL,
+            evaluated_by INTEGER NOT NULL,
+            evaluated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(evaluated_by) REFERENCES users(id)
+        );
+        CREATE TRIGGER IF NOT EXISTS annual_progression_reviews_no_update
+        BEFORE UPDATE ON annual_progression_reviews
+        BEGIN SELECT RAISE(ABORT, 'Annual progression reviews are append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS annual_progression_reviews_no_delete
+        BEFORE DELETE ON annual_progression_reviews
+        BEGIN SELECT RAISE(ABORT, 'Annual progression reviews are append-only'); END;
         CREATE TABLE IF NOT EXISTS eligibility_evidence_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER NOT NULL,
@@ -373,6 +395,51 @@ def approve_policy(policy_id):
     connection.commit()
     connection.close()
     flash("Eligibility policy approved with independent administrator review.", "success")
+    return redirect(url_for("eligibility.workspace"))
+
+
+@eligibility_bp.post("/progression/evaluate")
+def evaluate_progression():
+    if session.get("role") not in {"admin","registrar","examination_officer"}:
+        abort(403)
+    try:
+        student_id=int(request.form.get("student_id",""))
+        total=int(request.form.get("total_courses",""))
+        failed=int(request.form.get("failed_courses",""))
+        supplementary_failed=int(request.form.get("supplementary_failed_courses","0"))
+    except (TypeError,ValueError):
+        flash("Enter valid course counts and select a student.","error")
+        return redirect(url_for("eligibility.workspace"))
+    year=" ".join((request.form.get("academic_year") or "").split())[:20]
+    reference=" ".join((request.form.get("source_reference") or "").split())[:500]
+    fee_paid=request.form.get("supplementary_fee_paid")=="yes"
+    if not year or len(reference)<8:
+        flash("Provide the academic year and an official results/fee source reference.","error")
+        return redirect(url_for("eligibility.workspace"))
+    try:
+        result=evaluate_annual_progression(total,failed,fee_paid,supplementary_failed)
+    except ValueError as error:
+        flash(str(error),"error")
+        return redirect(url_for("eligibility.workspace"))
+    connection=db()
+    if not connection.execute("SELECT 1 FROM students WHERE id=?",(student_id,)).fetchone():
+        connection.close()
+        abort(404)
+    cursor=connection.execute("""
+        INSERT INTO annual_progression_reviews
+            (student_id,academic_year,total_courses,failed_courses,supplementary_failed_courses,
+             supplementary_fee_paid,pathway,failed_percentage,source_reference,evaluated_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?)
+    """,(student_id,year,total,failed,supplementary_failed,int(fee_paid),result["pathway"],
+          result["failed_percentage"],reference,session["user_id"]))
+    review_id=cursor.lastrowid
+    connection.execute("""
+        INSERT INTO audit_events(actor_user_id,action,entity_type,entity_id,summary)
+        VALUES(?,'evaluate_progression','annual_progression_review',?,?)
+    """,(session["user_id"],str(review_id),f"Recorded non-adjudicative annual pathway: {result['pathway']}."))
+    connection.commit()
+    connection.close()
+    flash(f"Annual pathway recorded: {result['pathway'].replace('_',' ').upper()}. {result['note']} No student status was changed; formal institutional approval is required.","success")
     return redirect(url_for("eligibility.workspace"))
 
 
