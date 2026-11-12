@@ -124,6 +124,7 @@ def portal():
     examinations = connection.execute("""
         SELECT es.session_code, es.session_date, es.start_time, es.end_time, es.status,
                ex.course_code, ex.examination_name, v.venue_code, v.room_name,
+               c.seat_label, c.eligibility_status, c.eligibility_note,
                a.status AS attendance_status, a.check_in_at, a.check_out_at
         FROM session_candidates c
         JOIN examination_sessions es ON es.id=c.session_id
