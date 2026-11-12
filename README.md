@@ -259,9 +259,9 @@ See [Production readiness](docs/PRODUCTION_READINESS.md), [Data governance](docs
 
 ## Testing
 
-Automated tests run in GitHub Actions. The current verified application commit completed **17 unit tests successfully**; this is not a substitute for browser end-to-end, security, load, accessibility, disaster-recovery or institutional acceptance testing.
+Automated tests run in GitHub Actions. The current verified application commit completed **19 unit tests successfully**; this is not a substitute for browser end-to-end, security, load, accessibility, disaster-recovery or institutional acceptance testing.
 
-See [docs/TESTING.md](docs/TESTING.md) and [the latest successful workflow](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43295342154).
+See [docs/TESTING.md](docs/TESTING.md) and [the latest successful workflow](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43296018137).
 
 ## Institutional development
 
