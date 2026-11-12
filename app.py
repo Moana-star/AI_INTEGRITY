@@ -18,7 +18,8 @@ CSRFProtect(app)
 rate_limit_storage = os.environ.get("RATELIMIT_STORAGE_URI")
 if os.environ.get("FLASK_ENV") == "production" and not rate_limit_storage:
     raise RuntimeError("RATELIMIT_STORAGE_URI must point to shared Redis-compatible storage in production.")
-limiter.init_app(app, storage_uri=rate_limit_storage or "memory://")
+app.config["RATELIMIT_STORAGE_URI"] = rate_limit_storage or "memory://"
+limiter.init_app(app)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "0") == "1",
                   MAX_CONTENT_LENGTH=6 * 1024 * 1024)
