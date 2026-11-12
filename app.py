@@ -3,11 +3,14 @@ import sqlite3
 import os
 from datetime import datetime
 from werkzeug.security import check_password_hash, generate_password_hash
+from modules.institutional_registry import registry_bp
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "0") == "1")
+
+app.register_blueprint(registry_bp)
 
 DATABASE = os.path.join(os.path.dirname(__file__), "database", "exam_integrity.db")
 
