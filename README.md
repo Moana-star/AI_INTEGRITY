@@ -242,46 +242,47 @@ The application provides a short explanation for each category. These labels do 
 
 ## Security and limitations
 
-This repository is intended for learning and demonstration. A dedicated security and operational review is required before any real-world use.
+This branch contains an institutional development increment. It is **not production-ready** and must not process real student data or live examination records.
 
-- **Password storage:** passwords are stored using Werkzeug password hashing.
-- **Database access:** the inspected application code uses parameterized SQL queries.
-- **Session secret:** configure `FLASK_SECRET_KEY` with a strong private value. The random fallback in the code is not suitable for stable production sessions across restarts.
-- **Password recovery:** the current forgot/reset-password experience is a local demonstration flow. It does not send a verified recovery email or establish account ownership; it is not secure production account recovery.
-- **Request protection:** implement and verify CSRF protection for state-changing forms before public deployment.
-- **Hosting:** a real deployment needs HTTPS, a production WSGI server, secure environment configuration, backups, monitoring, and an appropriately managed database.
-- **Privacy:** do not use real student information in this demonstration. Institutional use would require authorization, privacy safeguards, retention rules, auditability, and human review.
-- **Testing:** a manual checklist is provided, but it is not evidence that every test has passed.
+- CSRF protection is enabled for unsafe requests.
+- Staff and student login routes have IP-based rate limits; production requires shared Redis-compatible storage.
+- Username-only password recovery has been disabled until verified institutional recovery is integrated.
+- Session attendance CSV exports are restricted to administrators and audit logged.
+- Missing check-ins can be flagged for human review after a session; reconciliation does not automatically declare a student absent.
+- `/healthz` provides a minimal database readiness probe, not full monitoring or alerting.
+- The current database is SQLite. PostgreSQL migration has **not** been completed.
+- Evidence files remain on private local storage. Encryption at rest, malware scanning, managed object storage and retention automation remain outstanding.
+- No biometric data is captured or processed. Manual/student-card checks remain the available alternative.
+- No university SIS, SSO or institutional email integration is connected.
+
+See [Production readiness](docs/PRODUCTION_READINESS.md), [Data governance](docs/DATA_GOVERNANCE.md), and the [Infrastructure and integration plan](docs/INFRASTRUCTURE_AND_INTEGRATION_PLAN.md) for the outstanding controls and institutional approval gates.
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md) for manual checks covering setup, authentication, role access, record workflows, incident handling, and analysis. No automated test suite is currently included.
+Automated tests run in GitHub Actions. The current verified application commit completed **17 unit tests successfully**; this is not a substitute for browser end-to-end, security, load, accessibility, disaster-recovery or institutional acceptance testing.
+
+See [docs/TESTING.md](docs/TESTING.md) and [the latest successful workflow](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43295342154).
 
 ## Institutional development
 
 The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
 
-The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
-
-The institutional direction, phased implementation status, and data-governance boundaries are documented here:
-
 - [Institutional development roadmap](docs/INSTITUTIONAL_ROADMAP.md)
+- [Production-readiness checklist](docs/PRODUCTION_READINESS.md)
 - [Data governance and biometric safeguards](docs/DATA_GOVERNANCE.md)
+- [Infrastructure, PostgreSQL and institutional integration plan](docs/INFRASTRUCTURE_AND_INTEGRATION_PLAN.md)
 
-The first institutional-registry increment is available on the `feature/institutional-eims-foundation` branch. It adds a separate registry interface while preserving the existing student-management routes and legacy student records. The registry creates additive profile and operational schema tables when first accessed.
-
-**Important boundaries:** this increment does not connect to a university student information system, validate official student data, complete unit registration or attendance workflows, or perform facial recognition. The attendance table is a schema foundation only. No face images, embeddings, biometric templates, or liveness recordings are collected. Do not use real student records until institutional authorization, security controls, privacy governance, and a controlled pilot are complete.
+The application remains a configurable development build. University-specific data mappings, API endpoints, authentication providers, retention periods and biometric decisions require formal institutional input and authorization.
 
 ## Future improvements
 
-- Automated unit and integration tests.
-- CSRF protection and stronger input validation.
-- Verified account recovery using secure, expiring reset tokens.
-- Audit logs for important administrative actions.
-- Database migrations and backup/restore procedures.
-- Configurable review rules and governance controls.
-- Accessibility and usability testing.
-- Production deployment documentation and monitoring.
+- PostgreSQL repository-layer refactor and rehearsed data migration.
+- Full role-based authorization, MFA, account-level throttling and session revocation.
+- Encrypted evidence object storage, malware scanning and retention/legal-hold automation.
+- Independent reviewer assignment, separation of duties and formal appeals.
+- Full timetable, attendance and PDF reporting workflows.
+- Authorized SIS, institutional identity and email integrations.
+- Browser end-to-end, penetration, performance, accessibility and recovery testing.
 
 ## Author
 
