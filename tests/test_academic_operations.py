@@ -120,6 +120,31 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
             "academic_units", "student_unit_enrolments", "audit_events"
         }.issubset(tables))
 
+    def test_legacy_candidate_without_policy_evaluation_is_reset_to_pending(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO students(student_number,first_name,last_name) VALUES('LEGACY/1','Legacy','Candidate')")
+        connection.execute("INSERT INTO examinations(id,course_code,examination_name) VALUES(1,'LEG','Legacy Exam')")
+        connection.execute("""
+            INSERT INTO examination_sessions
+                (id,session_code,examination_id,academic_year,semester,session_date,start_time,end_time)
+            VALUES(1,'LEG-SESSION',1,'2026/2027','Semester 1','2026-11-20','09:00','11:00')
+        """)
+        connection.execute("""
+            INSERT INTO session_candidates(session_id,student_id,eligibility_status,eligibility_note)
+            VALUES(1,1,'eligible',NULL)
+        """)
+        connection.commit()
+        connection.close()
+        operations.ensure_schema()
+        connection = sqlite3.connect(self.path)
+        status = connection.execute("""
+            SELECT eligibility_status,eligibility_note FROM session_candidates
+            WHERE session_id=1 AND student_id=1
+        """).fetchone()
+        connection.close()
+        self.assertEqual(status[0], "pending")
+        self.assertIn("approved institutional eligibility policy", status[1])
+
     def test_duplicate_candidate_is_rejected(self):
         connection = sqlite3.connect(self.path)
         connection.execute("INSERT INTO students(student_number,first_name,last_name) VALUES('A/1','A','One')")
