@@ -12,7 +12,7 @@ class PasswordRecoverySecurityTests(unittest.TestCase):
     def test_forgot_password_does_not_create_username_authorized_reset(self):
         response = self.client.post("/forgot-password", data={"username": "admin"})
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"verified account-recovery", response.data.lower())
+        self.assertIn(b"self-service password recovery is not available", response.data.lower())
         with self.client.session_transaction() as browser_session:
             self.assertNotIn("password_reset_user_id", browser_session)
 
