@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from modules import institutional_registry, operations
+from modules import institutional_registry, operations, integrity
 from app import app as flask_app
 
 
@@ -31,14 +31,19 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         connection.close()
         self.registry_patch = patch.object(institutional_registry, "DATABASE", self.path)
         self.operations_patch = patch.object(operations, "DATABASE", self.path)
+        self.integrity_patch = patch.object(integrity, "DATABASE", self.path)
         self.registry_patch.start()
         self.operations_patch.start()
+        self.integrity_patch.start()
         institutional_registry.ensure_schema()
         operations.ensure_schema()
 
     def tearDown(self):
         self.registry_patch.stop()
         self.operations_patch.stop()
+        self.integrity_patch.stop()
+        operations.SCHEMA_READY = False
+        integrity.SCHEMA_READY = False
         os.unlink(self.path)
 
     def test_admin_can_export_session_attendance_csv(self):
