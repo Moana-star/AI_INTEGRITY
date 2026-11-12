@@ -74,16 +74,22 @@ def ensure_schema():
     connection.close()
 
 
+SCHEMA_READY = False
+
+
 def staff():
     return "user_id" in session and session.get("role") in {"admin", "invigilator"}
 
 
 @integrity_bp.before_request
 def prepare():
+    global SCHEMA_READY
     if not staff():
         return redirect(url_for("login"))
-    ensure_registry_schema()
-    ensure_schema()
+    if not SCHEMA_READY:
+        ensure_registry_schema()
+        ensure_schema()
+        SCHEMA_READY = True
 
 
 @integrity_bp.get("/incidents/<int:incident_id>")
