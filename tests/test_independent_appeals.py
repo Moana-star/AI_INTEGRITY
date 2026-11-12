@@ -50,6 +50,8 @@ class IndependentAppealTests(unittest.TestCase):
         integrity.SCHEMA_READY=False
         operations.SCHEMA_READY=False
         institutional_registry._schema_ready=False
+        institutional_registry.ensure_schema()
+        integrity.ensure_schema()
         appeals.ensure_schema()
         connection=sqlite3.connect(self.path)
         connection.execute("""
