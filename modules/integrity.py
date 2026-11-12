@@ -65,6 +65,15 @@ def ensure_schema():
             FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
             FOREIGN KEY(uploaded_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS evidence_access_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evidence_id INTEGER NOT NULL,
+            actor_user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(evidence_id) REFERENCES incident_evidence(id) ON DELETE CASCADE,
+            FOREIGN KEY(actor_user_id) REFERENCES users(id)
+        );
     """)
     connection.execute("""
         INSERT OR IGNORE INTO incident_case_workflow(incident_id, case_status)
@@ -107,6 +116,15 @@ def case_detail(incident_id):
     if not incident:
         connection.close()
         abort(404)
+    if session.get("role") == "invigilator":
+        assigned = connection.execute("""
+            SELECT 1 FROM examinations e
+            JOIN invigilators v ON v.id=e.invigilator_id
+            WHERE e.id=? AND v.user_id=?
+        """, (incident["examination_id"], session.get("user_id"))).fetchone()
+        if not assigned:
+            connection.close()
+            abort(403)
     evidence = connection.execute("""
         SELECT id, original_filename, media_type, file_size, sha256, description, created_at
         FROM incident_evidence WHERE incident_id=? ORDER BY created_at DESC
@@ -194,9 +212,18 @@ def upload_evidence(incident_id):
         flash("The uploaded file does not have a valid PNG signature.", "error")
         return redirect(url_for("integrity.case_detail", incident_id=incident_id))
     connection = db()
-    if not connection.execute("SELECT 1 FROM incidents WHERE id=?", (incident_id,)).fetchone():
+    incident = connection.execute("SELECT examination_id FROM incidents WHERE id=?", (incident_id,)).fetchone()
+    if not incident:
         connection.close()
         abort(404)
+    if session.get("role") == "invigilator":
+        assigned = connection.execute("""
+            SELECT 1 FROM examinations e JOIN invigilators v ON v.id=e.invigilator_id
+            WHERE e.id=? AND v.user_id=?
+        """, (incident["examination_id"], session.get("user_id"))).fetchone()
+        if not assigned:
+            connection.close()
+            abort(403)
     os.makedirs(EVIDENCE_ROOT, mode=0o700, exist_ok=True)
     stored = f"{uuid.uuid4().hex}{extension}"
     target = os.path.join(EVIDENCE_ROOT, stored)
@@ -238,5 +265,16 @@ def download_evidence(evidence_id):
     path = os.path.join(EVIDENCE_ROOT, record["stored_filename"])
     if not os.path.isfile(path):
         abort(404)
+    digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    if digest != record["sha256"]:
+        current_app.logger.error("Evidence checksum mismatch for evidence ID %s", evidence_id)
+        abort(500)
+    audit = db()
+    audit.execute("INSERT INTO evidence_access_events(evidence_id, actor_user_id, action) VALUES (?, ?, 'download')",
+                  (evidence_id, session["user_id"]))
+    audit.execute("INSERT INTO audit_events(actor_user_id, action, entity_type, entity_id, summary) VALUES (?, 'evidence_download', 'incident_evidence', ?, 'Evidence file downloaded by authorized administrator.')",
+                  (session["user_id"], str(evidence_id)))
+    audit.commit()
+    audit.close()
     return send_file(path, mimetype=record["media_type"], as_attachment=True,
                      download_name=record["original_filename"], conditional=True)
