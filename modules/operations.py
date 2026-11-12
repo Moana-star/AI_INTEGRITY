@@ -13,6 +13,7 @@ import sqlite3
 from datetime import date, datetime
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
+from modules.integrity import ensure_schema as ensure_integrity_schema
 
 operations_bp = Blueprint("operations", __name__, url_prefix="/operations")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -144,6 +145,7 @@ def prepare():
     if not SCHEMA_READY:
         ensure_registry_schema()
         ensure_schema()
+        ensure_integrity_schema()
         SCHEMA_READY = True
 
 
@@ -555,6 +557,56 @@ def record_attendance(session_id, student_id):
     connection.close()
     flash("Attendance event recorded and audit logged.", "success")
     return redirect(url_for("operations.attendance", session_id=session_id))
+
+
+@operations_bp.post("/sessions/<int:session_id>/candidates/<int:student_id>/incidents")
+def report_session_incident(session_id, student_id):
+    if not _require_staff():
+        return redirect(url_for("login"))
+    connection = db()
+    session_row = connection.execute("SELECT * FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
+    if not session_row or session_row["status"] not in {"scheduled", "active"}:
+        connection.close()
+        flash("This examination session is not accepting incident reports.", "error")
+        return redirect(url_for("operations.workspace"))
+    if session.get("role") == "invigilator":
+        assigned = connection.execute("""
+            SELECT 1 FROM session_invigilators si JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE si.session_id=? AND i.user_id=?
+        """, (session_id, session.get("user_id"))).fetchone()
+        if not assigned:
+            connection.close()
+            abort(403)
+    candidate = connection.execute("""
+        SELECT 1 FROM session_candidates WHERE session_id=? AND student_id=?
+          AND eligibility_status='eligible'
+    """, (session_id, student_id)).fetchone()
+    if not candidate:
+        connection.close()
+        flash("An incident can only be linked to an eligible candidate in this session.", "error")
+        return redirect(url_for("operations.attendance", session_id=session_id))
+    incident_type = " ".join((request.form.get("incident_type") or "").split())[:100]
+    description = " ".join((request.form.get("description") or "").split())[:2000]
+    severity = (request.form.get("severity") or "low").strip()
+    if not incident_type or len(description) < 20 or severity not in {"low", "medium", "high"}:
+        connection.close()
+        flash("Provide an incident category, a factual description of at least 20 characters and a valid severity.", "error")
+        return redirect(url_for("operations.attendance", session_id=session_id))
+    cursor = connection.execute("""
+        INSERT INTO incidents(student_id, examination_id, incident_type, description, severity, status)
+        VALUES (?, ?, ?, ?, ?, 'open')
+    """, (student_id, session_row["examination_id"], incident_type, description, severity))
+    incident_id = cursor.lastrowid
+    connection.execute("INSERT INTO incident_session_links(incident_id, session_id) VALUES (?, ?)",
+                       (incident_id, session_id))
+    connection.execute("INSERT OR IGNORE INTO incident_case_workflow(incident_id, case_status) VALUES (?, 'reported')",
+                       (incident_id,))
+    _audit(connection, "report_incident", "incident", incident_id,
+           f"Incident report linked to examination session {session_row['session_code']}.")
+    connection.commit()
+    connection.close()
+    flash("Incident report recorded against this student and examination session. It remains an allegation for review.", "success")
+    return redirect(url_for("integrity.case_detail", incident_id=incident_id))
 
 
 @operations_bp.post("/sessions/<int:session_id>/candidates/import-enrolments")
