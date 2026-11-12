@@ -73,7 +73,8 @@ def login():
     account = connection.execute("""
         SELECT a.*, s.student_number FROM student_portal_accounts a
         JOIN students s ON s.id=a.student_id
-        WHERE s.student_number=? AND a.active=1
+        LEFT JOIN student_profiles p ON p.student_id=s.id
+        WHERE s.student_number=? AND a.active=1 AND COALESCE(p.academic_status,'active')='active'
     """, (admission,)).fetchone()
     valid = account and check_password_hash(account["password_hash"], password)
     if not valid:
