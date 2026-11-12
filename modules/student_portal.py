@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.operations import ensure_schema as ensure_operations_schema
 from modules.integrity import ensure_schema as ensure_integrity_schema
+from modules.security import limiter
 
 student_bp = Blueprint("student_portal", __name__, url_prefix="/student")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -64,6 +65,7 @@ def prepare():
 
 
 @student_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def login():
     if request.method == "GET":
         return render_template("student_login.html")
