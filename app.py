@@ -9,6 +9,7 @@ from modules.institutional_registry import registry_bp
 from modules.operations import operations_bp
 from modules.integrity import integrity_bp
 from modules.student_portal import student_bp
+from modules.access_control import (STAFF_ROLES, effective_user_role, ensure_role_schema, legacy_role_for)
 
 app = Flask(__name__)
 if os.environ.get("FLASK_ENV") == "production" and not os.environ.get("FLASK_SECRET_KEY"):
@@ -116,7 +117,12 @@ def home():
         return redirect(url_for("admin_dashboard"))
     if invigilator_required():
         return redirect(url_for("invigilator_dashboard"))
-    if session.get("role") == "student" and session.get("student_id"):
+    role = session.get("role")
+    if role == "registrar":
+        return redirect(url_for("registry.students"))
+    if role == "examination_officer":
+        return redirect(url_for("operations.workspace"))
+    if role == "student" and session.get("student_id"):
         return redirect(url_for("student_portal.portal"))
     return render_template("index.html")
 
@@ -129,78 +135,102 @@ def login():
 
     username = (request.form.get("username") or "").strip()
     password = request.form.get("password") or ""
-    role = request.form.get("role")
+    requested_role = (request.form.get("role") or "").strip().lower()
 
-    if not username or not password or not role:
+    if not username or not password or not requested_role:
         return render_template("login.html", error="Please complete all login fields.")
-
-    if role not in {"admin", "invigilator"}:
+    if requested_role not in STAFF_ROLES:
         return render_template("login.html", error="Invalid username or password.")
 
     connection = get_db_connection()
-    user = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    connection.close()
+    try:
+        ensure_role_schema(connection)
+        user = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        actual_role = effective_user_role(user)
+    finally:
+        connection.close()
 
-    if user is None or not check_password_hash(user["password"], password):
-        return render_template("login.html", error="Invalid username or password.")
-
-    if user["role"] != role:
+    if user is None or not check_password_hash(user["password"], password) or actual_role != requested_role:
         return render_template("login.html", error="Invalid username or password.")
 
     session.clear()
     session["user_id"] = user["id"]
     session["username"] = user["username"]
-    session["role"] = user["role"]
+    session["role"] = actual_role
 
-    if user["role"] == "admin":
+    if actual_role == "admin":
         return redirect(url_for("admin_dashboard"))
-    return redirect(url_for("invigilator_dashboard"))
+    if actual_role == "invigilator":
+        return redirect(url_for("invigilator_dashboard"))
+    if actual_role == "registrar":
+        return redirect(url_for("registry.students"))
+    return redirect(url_for("operations.workspace"))
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == "GET":
-        return render_template("register.html")
+    # Staff access is institution-controlled. Public self-registration would
+    # let an unaffiliated person claim an invigilator identity.
+    return render_template(
+        "register.html",
+        error="Staff accounts are provisioned by an authorized EIMS administrator. Contact your institution's system administrator."
+    )
 
-    full_name = " ".join((request.form.get("full_name") or "").split())
-    username = (request.form.get("username") or "").strip().lower()
-    password = request.form.get("password") or ""
-    confirm_password = request.form.get("confirm_password") or ""
-    role = (request.form.get("role") or "").strip().lower()
 
-    values = {"full_name": full_name, "username": username}
-    if not full_name or not username or not password or not confirm_password or not role:
-        return render_template("register.html", error="Complete all required fields.", values=values)
-    if role != "invigilator":
-        return render_template("register.html", error="Self-registration is available for invigilators only.", values=values)
-    if len(full_name) > 100 or not (3 <= len(username) <= 32) or not all(ch.isalnum() or ch in "._-" for ch in username):
-        return render_template("register.html", error="Enter a name and a username of 3–32 letters, numbers, dots, underscores or hyphens.", values=values)
-    if len(password) < 8:
-        return render_template("register.html", error="Password must be at least 8 characters.", values=values)
-    if password != confirm_password:
-        return render_template("register.html", error="Passwords do not match.", values=values)
-
-    name_parts = full_name.split()
-    first_name = name_parts[0]
-    last_name = " ".join(name_parts[1:]) or first_name
-    employee_number = "REG-" + username.upper()
+@app.route("/admin/institutional-users", methods=["GET", "POST"])
+def institutional_users():
+    if not admin_required():
+        return redirect(url_for("login"))
     connection = get_db_connection()
-    try:
-        cursor = connection.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, 'invigilator')",
-            (username, generate_password_hash(password))
-        )
-        connection.execute(
-            "INSERT INTO invigilators (user_id, employee_number, first_name, last_name, status) VALUES (?, ?, ?, ?, 'active')",
-            (cursor.lastrowid, employee_number, first_name, last_name)
-        )
-        connection.commit()
-    except sqlite3.IntegrityError:
-        connection.rollback()
-        connection.close()
-        return render_template("register.html", error="That username is unavailable. Choose another.", values=values)
+    ensure_role_schema(connection)
+    if request.method == "POST":
+        full_name = " ".join((request.form.get("full_name") or "").split())
+        username = (request.form.get("username") or "").strip().lower()
+        password = request.form.get("password") or ""
+        role = (request.form.get("role") or "").strip().lower()
+        employee_number = (request.form.get("employee_number") or "").strip().upper()
+        department = " ".join((request.form.get("department") or "").split()) or None
+        reason = " ".join((request.form.get("reason") or "").split())
+        valid_username = 3 <= len(username) <= 32 and all(ch.isalnum() or ch in "._-" for ch in username)
+        if (not full_name or len(full_name) > 100 or not valid_username or
+                role not in STAFF_ROLES or len(password) < 12 or len(reason) < 10 or
+                (role == "invigilator" and not employee_number)):
+            connection.close()
+            return render_template("institutional_users.html", users=[],
+                error="Provide a valid name, username, role, 12-character password and reason. Invigilators also require an employee number.")
+        try:
+            legacy_role = legacy_role_for(role)
+            cursor = connection.execute(
+                "INSERT INTO users(username,password,role,institutional_role) VALUES(?,?,?,?)",
+                (username, generate_password_hash(password), legacy_role, role))
+            user_id = cursor.lastrowid
+            if role == "invigilator":
+                parts = full_name.split()
+                connection.execute("""INSERT INTO invigilators
+                    (user_id,employee_number,first_name,last_name,status)
+                    VALUES(?,?,?,?, 'active')""",
+                    (user_id, employee_number, parts[0], " ".join(parts[1:]) or parts[0]))
+            else:
+                connection.execute("""INSERT INTO institutional_staff_profiles
+                    (user_id,full_name,employee_number,department) VALUES(?,?,?,?)""",
+                    (user_id, full_name, employee_number or None, department))
+            connection.execute("""INSERT INTO institutional_role_audit
+                (actor_user_id,target_user_id,previous_role,new_role,reason)
+                VALUES(?,?,NULL,?,?)""", (session["user_id"], user_id, role, reason))
+            connection.commit()
+            flash("Institutional staff account created. Provide its credentials through the institution's approved secure channel.", "success")
+        except sqlite3.IntegrityError:
+            connection.rollback()
+            flash("That username or employee number is already in use.", "error")
+        finally:
+            connection.close()
+        return redirect(url_for("institutional_users"))
+    users = connection.execute("""SELECT u.id,u.username,u.institutional_role,
+        COALESCE(p.full_name, i.first_name || ' ' || i.last_name, u.username) AS full_name
+        FROM users u LEFT JOIN institutional_staff_profiles p ON p.user_id=u.id
+        LEFT JOIN invigilators i ON i.user_id=u.id ORDER BY u.username""").fetchall()
     connection.close()
-    return render_template("register.html", success="Your invigilator account has been created. You can now sign in.")
+    return render_template("institutional_users.html", users=users)
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
