@@ -5,6 +5,8 @@ from datetime import datetime
 from werkzeug.security import check_password_hash, generate_password_hash
 from modules.institutional_registry import registry_bp
 from modules.operations import operations_bp
+from modules.integrity import integrity_bp
+from modules.student_portal import student_bp
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
@@ -13,6 +15,8 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
 
 app.register_blueprint(registry_bp)
 app.register_blueprint(operations_bp)
+app.register_blueprint(integrity_bp)
+app.register_blueprint(student_bp)
 
 DATABASE = os.path.join(os.path.dirname(__file__), "database", "exam_integrity.db")
 
@@ -85,6 +89,8 @@ def home():
         return redirect(url_for("admin_dashboard"))
     if invigilator_required():
         return redirect(url_for("invigilator_dashboard"))
+    if session.get("role") == "student" and session.get("student_id"):
+        return redirect(url_for("student_portal.portal"))
     return render_template("index.html")
 
 
