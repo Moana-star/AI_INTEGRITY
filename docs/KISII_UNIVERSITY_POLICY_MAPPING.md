@@ -48,9 +48,12 @@ The Kenya Law page explicitly warns that the displayed 2020 Legal Notice version
 
 - Versioned, independently approved policy drafts.
 - Rule parameters for active academic status, registered unit, fee clearance, minimum attendance percentage and minimum CAT count.
-- Evidence records for total/attended lectures, CATs required/sat and fee-clearance status, with a source reference and verifying staff account.
+- Registrar, administrator or examination-officer evidence entry for total/attended lectures, CATs required/sat and fee-clearance status, with a source reference and verifying staff account.
 - Missing evidence remains pending. Explicit failed requirements return an explainable ineligible result.
 - The engine applies a decision only to scheduled sessions; it does not rewrite completed examination records.
+- Newly created policy drafts prefill 80% attendance and two CATs from the 2019 handbook, but the policy is not pre-approved. A second administrator must independently approve it before it can be used.
+- Session activation now requires an active venue within capacity and at least two active invigilators.
+- A separate Senate verdict register records the communication date and enables a student to submit a review request within 21 calendar days. This is distinct from an ordinary incident appeal.
 - The rule defaults (80% attendance and two CATs) are prefilled from the 2019 handbook as a **draft starting point only**. No policy is pre-approved or activated by this document.
 
 ## Not yet implemented
