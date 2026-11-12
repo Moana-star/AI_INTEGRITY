@@ -48,6 +48,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
 
     def test_session_activation_requires_venue_capacity_and_two_invigilators(self):
         connection = sqlite3.connect(self.path)
+        connection.row_factory = sqlite3.Row
         connection.execute("INSERT INTO users(id) VALUES(1)")
         connection.execute("INSERT INTO examinations(id,course_code,examination_name) VALUES(1,'CSC201','Data Structures')")
         connection.execute("INSERT INTO venues(id,venue_code,room_name,capacity) VALUES(1,'HALL-A','Hall A',2)")
