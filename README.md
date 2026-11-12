@@ -21,6 +21,9 @@ A developing Flask-based university examination operations platform with student
 - [Testing](#testing)
 - [Institutional development](#institutional-development)
 - [Production readiness](docs/PRODUCTION_READINESS.md)
+- [Kisii University examination policy mapping](docs/KISII_UNIVERSITY_POLICY_MAPPING.md)
+- [Kisii University integration readiness](docs/KISII_UNIVERSITY_INTEGRATION_READINESS.md)
+- [PostgreSQL migration and production runbook](docs/POSTGRESQL_MIGRATION_AND_PRODUCTION_RUNBOOK.md)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
@@ -32,13 +35,13 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 
 ## Features
 
-- **Role-aware sign-in:** administrator and invigilator accounts have different application areas.
-- **Invigilator registration:** self-registration is restricted to the invigilator role.
+- **Five-role access foundation:** administrator, registrar, examination officer, invigilator and student workflows use separate authentication and role checks. Staff accounts are provisioned by an administrator; public staff self-registration is disabled.
 - **Student management:** maintain student records used by examination and incident workflows.
 - **Institutional student registry (initial increment):** maintain admission-number-based profiles, academic placement, institutional contact fields, and academic status; import authorized UTF-8 CSV records.
-- **Academic operations:** create academic units, enrol active students, create examination sessions, derive candidate lists from enrolments, register venues, check venue capacity, and assign invigilators.
-- **Attendance:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, and audit events. Facial recognition is not enabled.
-- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, and incident-response submission when requested.
+- **Academic operations:** create academic units, enrol students, create examination sessions, derive candidate lists from enrolments, check venue capacity and timetable overlaps, and assign invigilators. A session cannot be activated without an active venue and at least two active invigilators.
+- **Kisii policy-gated eligibility:** versioned policy drafts, independent approval, evidence records for course registration, fees, lecture attendance and CAT participation. Missing evidence remains pending; attendance is not a substitute for eligibility.
+- **Attendance and identity:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, audit events and a preview-only camera interface. Live facial recognition is disabled.
+- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, incident responses, independent incident appeals and Senate verdict review requests within the recorded 21-day period.
 - **Incident investigations:** case workflow statuses, reviewer notes, restricted evidence uploads, SHA-256 checksums, and audited evidence downloads.
 - **Examination management:** manage examination details, schedules, venues, statuses, and invigilator assignments.
 - **Invigilator management:** maintain invigilator details and status.
@@ -46,7 +49,7 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 - **Incident review:** administrators can manage case workflow statuses, record review notes, and view student responses. Evidence files are stored outside the public static directory.
 - **Explainable incident analysis:** categorize recorded incident patterns using explicit rules and show a reason for each category.
 - **Dashboards and reports:** present examination, incident, and record summaries.
-- **Local persistence:** store application data in SQLite.
+- **Local persistence:** store development data in SQLite. Production startup is deliberately blocked until the PostgreSQL migration is complete and verified.
 
 ## Architecture
 
@@ -85,8 +88,12 @@ AI_INTEGRITY/
 ├── database/
 │   └── database.py           # SQLite schema and demo-data seeding
 ├── modules/
-│   ├── institutional_registry.py # Institutional student registry
+│   ├── access_control.py         # Staff role policy and migration
+│   ├── institutional_registry.py # Student registry and academic history
 │   ├── operations.py             # Academic units, sessions and attendance
+│   ├── eligibility.py            # Kisii policy and eligibility evidence
+│   ├── appeals.py                # Incident appeals and Senate reviews
+│   ├── identity_check.py         # Session identity and camera preview
 │   ├── integrity.py              # Incident case review and evidence
 │   └── student_portal.py         # Student self-service and responses
 ├── docs/
@@ -94,6 +101,9 @@ AI_INTEGRITY/
 │   ├── DATA_GOVERNANCE.md    # Privacy and biometric safeguards
 │   ├── INSTITUTIONAL_ROADMAP.md # Phased institutional development
 │   ├── PRODUCTION_READINESS.md # Go-live requirements and blockers
+│   ├── KISII_UNIVERSITY_POLICY_MAPPING.md # Public rule sources and policy mapping
+│   ├── KISII_UNIVERSITY_INTEGRATION_READINESS.md # SIS/SSO integration prerequisites
+│   ├── POSTGRESQL_MIGRATION_AND_PRODUCTION_RUNBOOK.md # Migration and release gates
 │   └── TESTING.md            # Automated and manual test guidance
 ├── tests/
 │   ├── test_institutional_registry.py
@@ -108,7 +118,7 @@ AI_INTEGRITY/
 └── .gitignore
 ```
 
-The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
+The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
 
 ## Technology stack
 
