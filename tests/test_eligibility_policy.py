@@ -25,6 +25,14 @@ class EligibilityPolicyTests(unittest.TestCase):
                 id INTEGER PRIMARY KEY, student_id INTEGER, unit_id INTEGER,
                 academic_year TEXT, semester TEXT, enrolment_status TEXT
             );
+            CREATE TABLE examination_sessions(
+                id INTEGER PRIMARY KEY, unit_id INTEGER, academic_year TEXT,
+                semester TEXT, status TEXT
+            );
+            CREATE TABLE session_candidates(
+                session_id INTEGER, student_id INTEGER,
+                eligibility_status TEXT, eligibility_note TEXT
+            );
         """)
         connection.executemany("INSERT INTO users(id,username) VALUES(?,?)", [(1,"officer"),(2,"approver")])
         connection.execute("INSERT INTO students(id,student_number) VALUES(1,'S/001')")
@@ -93,6 +101,39 @@ class EligibilityPolicyTests(unittest.TestCase):
         self.assertEqual(result,"eligible")
         self.assertIsNotNone(policy)
         self.assertIn("All conditions",reasons[0])
+
+    def test_eligibility_decision_updates_only_scheduled_session_candidates(self):
+        self.add_policy()
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO student_unit_enrolments
+                (student_id,unit_id,academic_year,semester,enrolment_status)
+            VALUES(1,1,'2026/2027','Semester 1','registered')
+        """)
+        connection.execute("""
+            INSERT INTO examination_sessions(id,unit_id,academic_year,semester,status)
+            VALUES(10,1,'2026/2027','Semester 1','scheduled')
+        """)
+        connection.execute("""
+            INSERT INTO examination_sessions(id,unit_id,academic_year,semester,status)
+            VALUES(11,1,'2026/2027','Semester 1','completed')
+        """)
+        connection.executemany("""
+            INSERT INTO session_candidates(session_id,student_id,eligibility_status,eligibility_note)
+            VALUES(?,1,'pending','Waiting')
+        """,[(10,),(11,)])
+        _, result, reasons, _ = eligibility.evaluate(
+            connection,1,1,"2026/2027","Semester 1",1)
+        changed = eligibility.apply_decision_to_scheduled_candidates(
+            connection,1,1,"2026/2027","Semester 1",result,reasons)
+        connection.commit()
+        rows = connection.execute("""
+            SELECT session_id,eligibility_status FROM session_candidates ORDER BY session_id
+        """).fetchall()
+        connection.close()
+        self.assertEqual(result,"eligible")
+        self.assertEqual(changed,1)
+        self.assertEqual([(row[0],row[1]) for row in rows],[(10,"eligible"),(11,"pending")])
 
     def test_suspended_student_is_not_eligible(self):
         self.add_policy()
