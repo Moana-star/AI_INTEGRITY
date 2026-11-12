@@ -19,7 +19,9 @@ A developing Flask-based university examination operations platform with student
 - [Incident review categories](#incident-review-categories)
 - [Security and limitations](#security-and-limitations)
 - [Testing](#testing)
-- [Institutional development](#institutional-development)\n- [Production readiness](docs/PRODUCTION_READINESS.md)
+- [Institutional development](#institutional-development)
+- [Production readiness](docs/PRODUCTION_READINESS.md)
+- [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
@@ -35,7 +37,10 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 - **Invigilator registration:** self-registration is restricted to the invigilator role.
 - **Student management:** maintain student records used by examination and incident workflows.
 - **Institutional student registry (initial increment):** maintain admission-number-based profiles, academic placement, institutional contact fields, and academic status; import authorized UTF-8 CSV records.
-- **Academic operations:** create academic units, enrol active students, create examination sessions, derive candidate lists from enrolments, register venues, check venue capacity, and assign invigilators.\n- **Attendance:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, and audit events. Facial recognition is not enabled.\n- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, and incident-response submission when requested.\n- **Incident investigations:** case workflow statuses, reviewer notes, restricted evidence uploads, SHA-256 checksums, and audited evidence downloads.
+- **Academic operations:** create academic units, enrol active students, create examination sessions, derive candidate lists from enrolments, register venues, check venue capacity, and assign invigilators.
+- **Attendance:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, and audit events. Facial recognition is not enabled.
+- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, and incident-response submission when requested.
+- **Incident investigations:** case workflow statuses, reviewer notes, restricted evidence uploads, SHA-256 checksums, and audited evidence downloads.
 - **Examination management:** manage examination details, schedules, venues, statuses, and invigilator assignments.
 - **Invigilator management:** maintain invigilator details and status.
 - **Incident reporting:** record incidents against students and examinations, including descriptions, severity, and status.
@@ -54,7 +59,14 @@ flowchart TD
     B <--> F[Flask Application: app.py]
     F --> A[Session and Role Checks]
     F --> R[Application Routes]
-    R --> D[SQLite Access]
+    R --> REG[Student Registry]
+    R --> OPS[Academic Operations and Attendance]
+    R --> CASE[Incident Review and Evidence]
+    R --> PORTAL[Student Portal]
+    REG --> D[SQLite Access]
+    OPS --> D
+    CASE --> D
+    PORTAL --> D
     D <--> DB[(SQLite Database)]
     R --> E[Rule-Based Incident Analysis]
     E --> R
@@ -74,14 +86,20 @@ AI_INTEGRITY/
 ├── database/
 │   └── database.py           # SQLite schema and demo-data seeding
 ├── modules/
-│   └── institutional_registry.py # Institutional student registry blueprint
+│   ├── institutional_registry.py # Institutional student registry
+│   ├── operations.py             # Academic units, sessions and attendance
+│   ├── integrity.py              # Incident case review and evidence
+│   └── student_portal.py         # Student self-service and responses
 ├── docs/
 │   ├── ARCHITECTURE.md       # Architecture notes
 │   ├── DATA_GOVERNANCE.md    # Privacy and biometric safeguards
 │   ├── INSTITUTIONAL_ROADMAP.md # Phased institutional development
+│   ├── PRODUCTION_READINESS.md # Go-live requirements and blockers
 │   └── TESTING.md            # Automated and manual test guidance
 ├── tests/
-│   └── test_institutional_registry.py
+│   ├── test_institutional_registry.py
+│   ├── test_academic_operations.py
+│   └── test_integrity_and_student_portal.py
 ├── .github/workflows/
 │   └── tests.yml             # Python test workflow
 ├── static/
@@ -91,7 +109,7 @@ AI_INTEGRITY/
 └── .gitignore
 ```
 
-The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
+The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
 
 ## Technology stack
 
@@ -241,6 +259,8 @@ This repository is intended for learning and demonstration. A dedicated security
 See [docs/TESTING.md](docs/TESTING.md) for manual checks covering setup, authentication, role access, record workflows, incident handling, and analysis. No automated test suite is currently included.
 
 ## Institutional development
+
+The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
 
 The institutional direction, phased implementation status, and data-governance boundaries are documented here:
 
