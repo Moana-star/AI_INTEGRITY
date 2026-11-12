@@ -406,11 +406,12 @@ def create_venue():
     return redirect(url_for("operations.workspace"))
 
 
-@operations_bp.post("/venues/<int:venue_id>/layout")
-def configure_venue_layout(venue_id):
+@operations_bp.post("/venues/layout")
+def configure_venue_layout():
     if not _require_admin():
         abort(403)
     try:
+        venue_id = int(request.form.get("venue_id", ""))
         rows = int(request.form.get("rows", ""))
         seats_per_row = int(request.form.get("seats_per_row", ""))
     except (TypeError, ValueError):
