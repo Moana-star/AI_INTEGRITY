@@ -75,7 +75,7 @@ def ensure_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
             student_id INTEGER NOT NULL,
-            eligibility_status TEXT NOT NULL DEFAULT 'eligible'
+            eligibility_status TEXT NOT NULL DEFAULT 'pending'
                 CHECK(eligibility_status IN ('eligible','pending','ineligible')),
             eligibility_note TEXT,
             seat_label TEXT,
@@ -119,6 +119,15 @@ def ensure_schema():
         CREATE INDEX IF NOT EXISTS idx_candidates_session ON session_candidates(session_id);
         CREATE INDEX IF NOT EXISTS idx_attendance_session ON session_attendance(session_id);
         CREATE INDEX IF NOT EXISTS idx_exam_sessions_date ON examination_sessions(session_date);
+    """)
+    # Legacy candidates were marked eligible merely because they were enrolled.
+    # Require an explicit, current policy evaluation before attendance can be recorded.
+    connection.execute("""
+        UPDATE session_candidates
+        SET eligibility_status='pending',
+            eligibility_note='Awaiting evaluation under an effective, approved institutional eligibility policy.'
+        WHERE eligibility_status='eligible'
+          AND (eligibility_note IS NULL OR eligibility_note='')
     """)
     connection.commit()
     connection.close()
