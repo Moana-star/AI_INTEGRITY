@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from modules import institutional_registry, operations
+from app import app as flask_app
 
 
 class AcademicOperationsSchemaTests(unittest.TestCase):
@@ -24,7 +25,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE invigilators (id INTEGER PRIMARY KEY, user_id INTEGER);
-            CREATE TABLE examinations (id INTEGER PRIMARY KEY);
+            CREATE TABLE examinations (id INTEGER PRIMARY KEY, course_code TEXT, examination_name TEXT, invigilator_id INTEGER);
         """)
         connection.close()
         self.registry_patch = patch.object(institutional_registry, "DATABASE", self.path)
@@ -38,6 +39,40 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         self.registry_patch.stop()
         self.operations_patch.stop()
         os.unlink(self.path)
+
+    def test_admin_can_export_session_attendance_csv(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO users(id) VALUES(1)")
+        connection.execute("INSERT INTO students(student_number,first_name,last_name) VALUES('REG/001','Amina','Otieno')")
+        connection.execute("INSERT INTO examinations(id,course_code,examination_name) VALUES(1,'CSC201','Data Structures')")
+        connection.execute("""
+            INSERT INTO examination_sessions
+            (id,session_code,examination_id,academic_year,semester,session_date,start_time,end_time)
+            VALUES(1,'CSC201-S1-A',1,'2026/2027','Semester 1','2026-11-20','09:00','11:00')
+        """)
+        connection.execute("INSERT INTO session_candidates(session_id,student_id,seat_label) VALUES(1,1,'SEAT-001')")
+        connection.commit()
+        connection.close()
+        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
+        client = flask_app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["user_id"] = 1
+            browser_session["role"] = "admin"
+        response = client.get("/operations/sessions/1/attendance.csv")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/csv", response.headers.get("Content-Type", ""))
+        self.assertIn(b"REG/001", response.data)
+        self.assertIn(b"not_recorded", response.data)
+        self.assertEqual(response.headers.get("Cache-Control"), "no-store, private")
+
+    def test_invigilator_cannot_export_attendance_csv(self):
+        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
+        client = flask_app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["user_id"] = 1
+            browser_session["role"] = "invigilator"
+        response = client.get("/operations/sessions/1/attendance.csv")
+        self.assertEqual(response.status_code, 403)
 
     def test_operational_tables_are_created(self):
         connection = sqlite3.connect(self.path)
