@@ -186,6 +186,22 @@ class EligibilityPolicyTests(unittest.TestCase):
         self.assertEqual(result,"pending")
         self.assertTrue(any("incomplete or invalid" in reason for reason in reasons))
 
+    def test_annual_progression_review_records_are_append_only(self):
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO annual_progression_reviews
+                (student_id,academic_year,total_courses,failed_courses,
+                 supplementary_failed_courses,supplementary_fee_paid,pathway,
+                 failed_percentage,source_reference,evaluated_by)
+            VALUES(1,'2026/2027',8,2,0,1,'supplementary_eligible',25.0,'RESULTS-REF-001',1)
+        """)
+        connection.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("UPDATE annual_progression_reviews SET pathway='all_courses_passed' WHERE id=1")
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("DELETE FROM annual_progression_reviews WHERE id=1")
+        connection.close()
+
     def test_eligibility_evidence_history_is_append_only(self):
         self.add_evidence()
         connection = self.connection()
