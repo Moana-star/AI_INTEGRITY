@@ -20,6 +20,7 @@
                 <a href="{{ url_for('admin_dashboard') }}" {% if request.endpoint == 'admin_dashboard' %}class="active" aria-current="page"{% endif %}>Dashboard</a>
                 <a href="{{ url_for('admin_students') }}" {% if request.endpoint in ['admin_students','add_student','edit_student'] %}class="active" aria-current="page"{% endif %}>Students</a>
                 <a href="{{ url_for('registry.students') }}" {% if request.blueprint == 'registry' %}class="active" aria-current="page"{% endif %}>Institutional Registry</a>
+                <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Academic Operations</a>
                 <a href="{{ url_for('admin_examinations') }}" {% if request.endpoint in ['admin_examinations','add_examination','edit_examination'] %}class="active" aria-current="page"{% endif %}>Examinations</a>
                 <a href="{{ url_for('admin_invigilators') }}" {% if request.endpoint in ['admin_invigilators','add_invigilator','edit_invigilator'] %}class="active" aria-current="page"{% endif %}>Invigilators</a>
                 <a href="{{ url_for('admin_incidents') }}" {% if request.endpoint in ['admin_incidents','add_incident'] %}class="active" aria-current="page"{% endif %}>Incidents</a>
@@ -28,6 +29,7 @@
                 <a href="{{ url_for('admin_settings') }}" {% if request.endpoint == 'admin_settings' %}class="active" aria-current="page"{% endif %}>Settings</a>
                 {% else %}
                 <a href="{{ url_for('invigilator_dashboard') }}" {% if request.endpoint == 'invigilator_dashboard' %}class="active" aria-current="page"{% endif %}>Dashboard</a>
+                <a href="{{ url_for('operations.workspace') }}">Assigned Attendance</a>
                 <a href="{{ url_for('add_incident') }}" {% if request.endpoint == 'add_incident' %}class="active" aria-current="page"{% endif %}>Report Incident</a>
                 {% endif %}
             </nav>
