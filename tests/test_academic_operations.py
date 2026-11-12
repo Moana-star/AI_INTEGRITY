@@ -25,6 +25,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE invigilators (id INTEGER PRIMARY KEY, user_id INTEGER);
+            CREATE TABLE incidents (id INTEGER PRIMARY KEY, status TEXT, student_id INTEGER, examination_id INTEGER, incident_type TEXT, description TEXT, severity TEXT, reported_at TEXT);
             CREATE TABLE examinations (id INTEGER PRIMARY KEY, course_code TEXT, examination_name TEXT, invigilator_id INTEGER);
         """)
         connection.close()
