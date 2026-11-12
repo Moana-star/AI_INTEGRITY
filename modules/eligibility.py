@@ -217,6 +217,40 @@ def evaluate(connection, student_id, unit_id, academic_year, semester, actor_id)
     return cursor.lastrowid, result, reasons, policy
 
 
+def evaluate_annual_progression(total_courses, failed_courses, supplementary_fee_paid,
+                               supplementary_failed_courses=0):
+    """Calculate a review pathway from the published 2019 handbook; never changes status."""
+    values = (total_courses,failed_courses,supplementary_failed_courses)
+    if any(type(value) is not int for value in values):
+        raise ValueError("Course counts must be whole numbers.")
+    if total_courses < 1 or not 0 <= failed_courses <= total_courses:
+        raise ValueError("Total courses must be positive and failed courses must be within the total.")
+    if not 0 <= supplementary_failed_courses <= failed_courses:
+        raise ValueError("Supplementary failed-course count cannot exceed the original failed-course count.")
+    if failed_courses == 0:
+        return {"pathway":"all_courses_passed","failed_percentage":0.0,
+                "requires_institutional_approval":True,
+                "note":"All recorded courses are passed; verify all other progression requirements."}
+    if supplementary_failed_courses:
+        return {"pathway":"repeat_failed_courses","failed_percentage":100.0*supplementary_failed_courses/total_courses,
+                "requires_institutional_approval":True,
+                "note":"The handbook states that failed supplementary courses must be repeated when next offered."}
+    failed_percentage=100.0*failed_courses/total_courses
+    if failed_percentage <= 25.0:
+        pathway="supplementary_eligible" if supplementary_fee_paid else "pending_supplementary_fee"
+        note=("Within the handbook's maximum 25% failed-course threshold; supplementary fee evidence is present."
+              if supplementary_fee_paid else
+              "Within the 25% threshold, but supplementary fee clearance has not been evidenced.")
+    elif failed_percentage <= 50.0:
+        pathway="repeat_academic_year"
+        note="Within the handbook's up-to-50% failed-course band; repeat-year treatment requires institutional confirmation."
+    else:
+        pathway="discontinuation_review_required"
+        note="Above the handbook's 50% threshold; refer for formal institutional discontinuation review, not automatic discontinuation."
+    return {"pathway":pathway,"failed_percentage":failed_percentage,
+            "requires_institutional_approval":True,"note":note}
+
+
 def apply_decision_to_scheduled_candidates(connection, student_id, unit_id,
                                                     academic_year, semester,
                                                     result, reasons):
