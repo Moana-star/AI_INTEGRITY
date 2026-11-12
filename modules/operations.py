@@ -357,8 +357,9 @@ def create_session():
             """, (unit_id, year, semester)).fetchall()
             for seat_number, candidate in enumerate(candidates, start=1):
                 connection.execute("""
-                    INSERT INTO session_candidates(session_id, student_id, eligibility_status, seat_label)
-                    VALUES (?, ?, 'eligible', ?)
+                    INSERT INTO session_candidates
+                        (session_id,student_id,eligibility_status,eligibility_note,seat_label)
+                    VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.',?)
                 """, (session_id, candidate["student_id"], f"SEAT-{seat_number:03d}"))
         candidate_count = len(candidates)
         if candidates:
@@ -387,7 +388,7 @@ def create_session():
         _audit(connection, "create", "examination_session", session_id,
                f"Created examination session {code}; candidate list derived from registered enrolments.")
         connection.commit()
-        flash(f"Examination session created with {candidate_count} eligible candidate(s).", "success")
+        flash(f"Examination session created with {candidate_count} candidate(s) awaiting approved eligibility evaluation.", "success")
     except sqlite3.IntegrityError:
         connection.rollback()
         flash("Session code already exists or the session conflicts with a database constraint.", "error")
