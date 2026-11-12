@@ -41,6 +41,12 @@ def ensure_schema():
             FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
             FOREIGN KEY(updated_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS incident_session_links (
+            incident_id INTEGER PRIMARY KEY,
+            session_id INTEGER NOT NULL,
+            FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
+            FOREIGN KEY(session_id) REFERENCES examination_sessions(id) ON DELETE CASCADE
+        );
         CREATE TABLE IF NOT EXISTS incident_case_responses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             incident_id INTEGER NOT NULL UNIQUE,
@@ -131,7 +137,13 @@ def case_detail(incident_id):
             SELECT 1 FROM examinations e
             JOIN invigilators v ON v.id=e.invigilator_id
             WHERE e.id=? AND v.user_id=?
-        """, (incident["examination_id"], session.get("user_id"))).fetchone()
+            UNION
+            SELECT 1 FROM incident_session_links l
+            JOIN session_invigilators si ON si.session_id=l.session_id
+            JOIN invigilators v ON v.id=si.invigilator_id
+            WHERE l.incident_id=? AND v.user_id=?
+            LIMIT 1
+        """, (incident["examination_id"], session.get("user_id"), incident_id, session.get("user_id"))).fetchone()
         if not assigned:
             connection.close()
             abort(403)
@@ -230,7 +242,13 @@ def upload_evidence(incident_id):
         assigned = connection.execute("""
             SELECT 1 FROM examinations e JOIN invigilators v ON v.id=e.invigilator_id
             WHERE e.id=? AND v.user_id=?
-        """, (incident["examination_id"], session.get("user_id"))).fetchone()
+            UNION
+            SELECT 1 FROM incident_session_links l
+            JOIN session_invigilators si ON si.session_id=l.session_id
+            JOIN invigilators v ON v.id=si.invigilator_id
+            WHERE l.incident_id=? AND v.user_id=?
+            LIMIT 1
+        """, (incident["examination_id"], session.get("user_id"), incident_id, session.get("user_id"))).fetchone()
         if not assigned:
             connection.close()
             abort(403)
