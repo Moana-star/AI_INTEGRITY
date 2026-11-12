@@ -136,10 +136,14 @@ def portal():
     incidents = connection.execute("""
         SELECT i.id, i.incident_type, i.description, i.severity, i.reported_at,
                w.case_status, w.student_response_due, r.submitted_at AS response_submitted_at,
-               a.appeal_status, a.submitted_at AS appeal_submitted_at
+               a.appeal_status, a.submitted_at AS appeal_submitted_at,
+               sv.id AS senate_verdict_id, sv.verdict_reference, sv.communicated_at,
+               sr.status AS senate_review_status, sr.submitted_at AS senate_review_submitted_at
         FROM incidents i LEFT JOIN incident_case_workflow w ON w.incident_id=i.id
         LEFT JOIN incident_case_responses r ON r.incident_id=i.id
         LEFT JOIN incident_appeals a ON a.incident_id=i.id
+        LEFT JOIN senate_disciplinary_verdicts sv ON sv.incident_id=i.id
+        LEFT JOIN senate_review_requests sr ON sr.verdict_id=sv.id
         WHERE i.student_id=? ORDER BY i.reported_at DESC
     """, (session["student_id"],)).fetchall()
     connection.close()
