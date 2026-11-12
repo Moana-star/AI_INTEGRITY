@@ -697,18 +697,26 @@ def refresh_candidates(session_id):
           AND e.enrolment_status='registered'
           AND COALESCE(p.academic_status,'active')='active'
     """, (session_row["unit_id"], session_row["academic_year"], session_row["semester"])).fetchall()
+    # Refresh invalidates prior eligibility decisions for this scheduled session.
+    # A fresh, effective policy evaluation is required before attendance resumes.
+    connection.execute("""
+        UPDATE session_candidates SET eligibility_status='pending',
+            eligibility_note='Candidate list refreshed; reevaluation under the current approved policy is required.'
+        WHERE session_id=?
+    """, (session_id,))
     added = 0
     for candidate in candidates:
         cursor = connection.execute("""
-            INSERT OR IGNORE INTO session_candidates(session_id, student_id, eligibility_status)
-            VALUES (?, ?, 'eligible')
+            INSERT OR IGNORE INTO session_candidates
+                (session_id,student_id,eligibility_status,eligibility_note)
+            VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.')
         """, (session_id, candidate["student_id"]))
         added += cursor.rowcount
     _audit(connection, "refresh_candidates", "examination_session", session_id,
-           f"Added {added} eligible candidates from current enrolments.")
+           f"Refreshed candidate list; {added} new candidates added and all candidates require fresh eligibility evaluation.")
     connection.commit()
     connection.close()
-    flash(f"Candidate list refreshed. {added} new eligible candidate(s) added.", "success")
+    flash(f"Candidate list refreshed. {added} new candidate(s) added; all candidates now require fresh eligibility evaluation.", "success")
     return redirect(url_for("operations.workspace"))
 
 @operations_bp.get("/sessions/<int:session_id>/attendance.csv")
