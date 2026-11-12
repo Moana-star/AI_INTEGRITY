@@ -42,6 +42,17 @@
 <label>Semester<input name="semester" maxlength="40" placeholder="e.g. Semester 1" required></label>
 </div><button class="btn btn-primary" type="submit">Evaluate eligibility</button>
 </form></section>
+<section class="panel"><h2>Annual progression and supplementary review</h2><p class="field-hint">This calculates the review pathway from recorded annual results. It does not change a student's academic status or replace Senate/Registrar approval. The 25% and 50% thresholds are drawn from the 2019 handbook and must be confirmed as current before production use.</p>
+<form method="post" action="{{ url_for('eligibility.evaluate_progression') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="form-grid">
+<label>Student<select name="student_id" required><option value="">Choose student</option>{% for s in students %}<option value="{{ s.id }}">{{ s.student_number }} · {{ s.first_name }} {{ s.last_name }}</option>{% endfor %}</select></label>
+<label>Academic year<input name="academic_year" maxlength="20" placeholder="2026/2027" required></label>
+<label>Total courses in academic year<input name="total_courses" type="number" min="1" required></label><label>Failed courses<input name="failed_courses" type="number" min="0" required></label>
+<label>Failed supplementary courses<input name="supplementary_failed_courses" type="number" min="0" value="0" required></label>
+<label>Supplementary fee status<select name="supplementary_fee_paid" required><option value="no">Not evidenced as paid</option><option value="yes">Paid and verified</option></select></label>
+<label class="form-grid-full">Official annual results / fee source reference<input name="source_reference" minlength="8" maxlength="500" required></label>
+</div><button class="btn btn-primary" type="submit">Calculate and record pathway</button></form>
+<div class="table-wrap"><table class="data-table"><thead><tr><th>Student</th><th>Year</th><th>Failed</th><th>Pathway</th><th>Recorded</th></tr></thead><tbody>{% for r in progression_reviews %}<tr><td>{{ r.student_number }} · {{ r.first_name }} {{ r.last_name }}</td><td>{{ r.academic_year }}</td><td>{{ r.failed_courses }}/{{ r.total_courses }} ({{ '%.1f'|format(r.failed_percentage) }}%)</td><td>{{ r.pathway|replace('_',' ')|title }}</td><td>{{ r.evaluated_at }}</td></tr>{% else %}<tr><td colspan="5">No annual progression reviews recorded.</td></tr>{% endfor %}</tbody></table></div>
+</section>
 <section class="panel"><h2>Recent decisions</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Student</th><th>Unit</th><th>Academic year</th><th>Semester</th><th>Result</th><th>Recorded</th></tr></thead><tbody>
 {% for d in decisions %}<tr><td>{{ d.student_number }}</td><td>{{ d.unit_code }}</td><td>{{ d.academic_year }}</td><td>{{ d.semester }}</td><td>{{ d.result|capitalize }}</td><td>{{ d.evaluated_at }}</td></tr>{% else %}<tr><td colspan="6">No eligibility evaluations recorded.</td></tr>{% endfor %}
 </tbody></table></div></section>
