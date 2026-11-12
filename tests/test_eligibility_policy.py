@@ -186,6 +186,34 @@ class EligibilityPolicyTests(unittest.TestCase):
         self.assertEqual(result,"pending")
         self.assertTrue(any("incomplete or invalid" in reason for reason in reasons))
 
+    def test_eligibility_evidence_history_is_append_only(self):
+        self.add_evidence()
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO eligibility_evidence_history
+                (student_id,unit_id,academic_year,semester,lectures_total,lectures_attended,
+                 cats_required,cats_sat,fees_cleared,evidence_reference,recorded_by)
+            VALUES(1,1,'2026/2027','Semester 1',10,8,2,2,1,'SOURCE-REF-001',1)
+        """)
+        connection.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("UPDATE eligibility_evidence_history SET fees_cleared=0 WHERE id=1")
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("DELETE FROM eligibility_evidence_history WHERE id=1")
+        connection.close()
+
+    def test_eligibility_decisions_are_append_only(self):
+        self.add_policy()
+        connection = self.connection()
+        decision_id, _, _, _ = eligibility.evaluate(
+            connection,1,1,"2026/2027","Semester 1",1)
+        connection.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("UPDATE eligibility_decisions SET result='eligible' WHERE id=?",(decision_id,))
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("DELETE FROM eligibility_decisions WHERE id=?",(decision_id,))
+        connection.close()
+
     def test_missing_verified_evidence_remains_pending(self):
         self.add_policy()
         connection = self.connection()
