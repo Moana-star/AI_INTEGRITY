@@ -188,7 +188,8 @@ def workspace():
     connection.close()
     return render_template("operations_workspace.html", units=units, students=students,
                            venues=venues, invigilators=invigilators, sessions=sessions,
-                           exams=exams, today=date.today().isoformat(), is_admin=_require_admin())
+                           exams=exams, today=date.today().isoformat(),
+                           is_admin=_require_admin(), can_manage_academics=_require_registrar())
 
 
 @operations_bp.post("/units")
