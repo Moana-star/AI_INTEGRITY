@@ -2,7 +2,7 @@
 
 A developing Flask-based university examination operations platform with student registry, academic enrolment, examination sessions, attendance, student self-service, and evidence-controlled incident review workflows.
 
-**Project type:** Academic / demonstration project  
+**Project status:** Institutional development in progress; not production-ready  
 **Stack:** Python · Flask · SQLite · HTML · CSS · JavaScript  
 **Repository:** [Moana-star/AI_INTEGRITY](https://github.com/Moana-star/AI_INTEGRITY)
 
@@ -20,6 +20,7 @@ A developing Flask-based university examination operations platform with student
 - [Security and limitations](#security-and-limitations)
 - [Testing](#testing)
 - [Institutional development](#institutional-development)
+- [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Future improvements](#future-improvements)
@@ -109,7 +110,7 @@ AI_INTEGRITY/
 └── .gitignore
 ```
 
-The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
+The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
 
 ## Technology stack
 
@@ -259,6 +260,8 @@ This repository is intended for learning and demonstration. A dedicated security
 See [docs/TESTING.md](docs/TESTING.md) for manual checks covering setup, authentication, role access, record workflows, incident handling, and analysis. No automated test suite is currently included.
 
 ## Institutional development
+
+The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
 
 The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
 
