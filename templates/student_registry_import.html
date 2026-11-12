@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Import Student Records | EIMS{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Institutional data onboarding</p><h1>Import Student Records</h1><p class="page-subtitle">Import an authorized UTF-8 CSV export from the university registry.</p></div></header>
+<section class="panel form-panel">
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  <h2>Required CSV columns</h2>
+  <p class="field-hint">Your CSV must contain these exact column headings:</p>
+  <pre class="code-sample">admission_number,first_name,last_name,course,year_of_study,faculty,department,institutional_email,phone,academic_status,academic_year,semester</pre>
+  <p class="field-hint">Allowed academic statuses: active, deferred, suspended, graduated, withdrawn. Leave optional values blank when they are not available.</p>
+  <form method="POST" enctype="multipart/form-data">
+    <label for="file">Student CSV file</label>
+    <input id="file" name="file" type="file" accept=".csv,text/csv" required>
+    <p class="field-hint">Maximum file size: 2 MB. Existing admission numbers and duplicate institutional emails are skipped. Review imported records before relying on them.</p>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Import CSV</button><a class="btn btn-ghost" href="{{ url_for('registry.students') }}">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}

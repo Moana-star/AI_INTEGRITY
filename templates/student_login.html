@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Student Portal Sign In | EIMS{% endblock %}
+{% block bare_content %}
+<main class="landing auth-landing"><section class="login-card auth-card"><div class="landing-icon" aria-hidden="true"></div><h1>Student Portal</h1><p class="page-subtitle">Sign in with your admission number and the temporary or current password issued by your institution.</p>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="{{ url_for('student_portal.login') }}"><label for="admission_number">Admission number</label><input id="admission_number" name="admission_number" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" name="password" autocomplete="current-password" required><button type="submit" class="btn btn-primary btn-block">Sign in to student portal</button></form>
+<nav class="auth-links"><a href="{{ url_for('login') }}">Staff sign in</a></nav></section></main>
+{% endblock %}

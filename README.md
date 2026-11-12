@@ -1,8 +1,8 @@
 # Examination Integrity Management System (EIMS)
 
-A Flask and SQLite web application for managing examination records, invigilator workflows, incident reports, and transparent rule-based incident summaries.
+A developing Flask-based university examination operations platform with student registry, academic enrolment, examination sessions, attendance, student self-service, and evidence-controlled incident review workflows.
 
-**Project type:** Academic / demonstration project  
+**Project status:** Institutional development in progress; not production-ready  
 **Stack:** Python · Flask · SQLite · HTML · CSS · JavaScript  
 **Repository:** [Moana-star/AI_INTEGRITY](https://github.com/Moana-star/AI_INTEGRITY)
 
@@ -19,12 +19,14 @@ A Flask and SQLite web application for managing examination records, invigilator
 - [Incident review categories](#incident-review-categories)
 - [Security and limitations](#security-and-limitations)
 - [Testing](#testing)
+- [Institutional development](#institutional-development)
+- [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
 ## Overview
 
-The Examination Integrity Management System (EIMS) demonstrates how a web application can support examination administration. It provides separate administrator and invigilator workflows, stores structured records in SQLite, and gives administrators a consolidated view of examinations and reported incidents.
+EIMS is being expanded into a university examination operations platform. The current feature branch adds administrator-managed student records, academic unit enrolment, examination sessions, eligible candidate lists, venue capacity checks, invigilator assignments, manual/student-card attendance, a student portal, and evidence-controlled incident review. These workflows are an implementation increment and still require local end-to-end verification and institutional security review.
 
 The analysis feature applies explicit rules to recorded incident data. Despite the interface's AI-analysis wording, **the current implementation does not use artificial intelligence, machine learning, or a trained predictive model**.
 
@@ -33,25 +35,37 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 - **Role-aware sign-in:** administrator and invigilator accounts have different application areas.
 - **Invigilator registration:** self-registration is restricted to the invigilator role.
 - **Student management:** maintain student records used by examination and incident workflows.
+- **Institutional student registry (initial increment):** maintain admission-number-based profiles, academic placement, institutional contact fields, and academic status; import authorized UTF-8 CSV records.
+- **Academic operations:** create academic units, enrol active students, create examination sessions, derive candidate lists from enrolments, register venues, check venue capacity, and assign invigilators.
+- **Attendance:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, and audit events. Facial recognition is not enabled.
+- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, and incident-response submission when requested.
+- **Incident investigations:** case workflow statuses, reviewer notes, restricted evidence uploads, SHA-256 checksums, and audited evidence downloads.
 - **Examination management:** manage examination details, schedules, venues, statuses, and invigilator assignments.
 - **Invigilator management:** maintain invigilator details and status.
 - **Incident reporting:** record incidents against students and examinations, including descriptions, severity, and status.
-- **Incident review:** administrators can review incidents and mark them as resolved.
+- **Incident review:** administrators can manage case workflow statuses, record review notes, and view student responses. Evidence files are stored outside the public static directory.
 - **Explainable incident analysis:** categorize recorded incident patterns using explicit rules and show a reason for each category.
 - **Dashboards and reports:** present examination, incident, and record summaries.
 - **Local persistence:** store application data in SQLite.
 
 ## Architecture
 
-The application uses a simple Flask server-rendered architecture:
+The application uses a modular Flask server-rendered architecture:
 
 ```mermaid
 flowchart TD
-    U[Administrator or Invigilator] --> B[Browser]
+    U[Administrator, Invigilator or Student] --> B[Browser]
     B <--> F[Flask Application: app.py]
     F --> A[Session and Role Checks]
     F --> R[Application Routes]
-    R --> D[SQLite Access]
+    R --> REG[Student Registry]
+    R --> OPS[Academic Operations and Attendance]
+    R --> CASE[Incident Review and Evidence]
+    R --> PORTAL[Student Portal]
+    REG --> D[SQLite Access]
+    OPS --> D
+    CASE --> D
+    PORTAL --> D
     D <--> DB[(SQLite Database)]
     R --> E[Rule-Based Incident Analysis]
     E --> R
@@ -70,9 +84,23 @@ AI_INTEGRITY/
 ├── requirements.txt          # Python dependency declaration
 ├── database/
 │   └── database.py           # SQLite schema and demo-data seeding
+├── modules/
+│   ├── institutional_registry.py # Institutional student registry
+│   ├── operations.py             # Academic units, sessions and attendance
+│   ├── integrity.py              # Incident case review and evidence
+│   └── student_portal.py         # Student self-service and responses
 ├── docs/
 │   ├── ARCHITECTURE.md       # Architecture notes
-│   └── TESTING.md            # Manual verification checklist
+│   ├── DATA_GOVERNANCE.md    # Privacy and biometric safeguards
+│   ├── INSTITUTIONAL_ROADMAP.md # Phased institutional development
+│   ├── PRODUCTION_READINESS.md # Go-live requirements and blockers
+│   └── TESTING.md            # Automated and manual test guidance
+├── tests/
+│   ├── test_institutional_registry.py
+│   ├── test_academic_operations.py
+│   └── test_integrity_and_student_portal.py
+├── .github/workflows/
+│   └── tests.yml             # Python test workflow
 ├── static/
 │   ├── css/style.css
 │   └── js/auth.js
@@ -80,7 +108,7 @@ AI_INTEGRITY/
 └── .gitignore
 ```
 
-The SQLite database is generated locally during setup and is intentionally excluded from Git.
+The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
 
 ## Technology stack
 
@@ -214,31 +242,47 @@ The application provides a short explanation for each category. These labels do 
 
 ## Security and limitations
 
-This repository is intended for learning and demonstration. A dedicated security and operational review is required before any real-world use.
+This branch contains an institutional development increment. It is **not production-ready** and must not process real student data or live examination records.
 
-- **Password storage:** passwords are stored using Werkzeug password hashing.
-- **Database access:** the inspected application code uses parameterized SQL queries.
-- **Session secret:** configure `FLASK_SECRET_KEY` with a strong private value. The random fallback in the code is not suitable for stable production sessions across restarts.
-- **Password recovery:** the current forgot/reset-password experience is a local demonstration flow. It does not send a verified recovery email or establish account ownership; it is not secure production account recovery.
-- **Request protection:** implement and verify CSRF protection for state-changing forms before public deployment.
-- **Hosting:** a real deployment needs HTTPS, a production WSGI server, secure environment configuration, backups, monitoring, and an appropriately managed database.
-- **Privacy:** do not use real student information in this demonstration. Institutional use would require authorization, privacy safeguards, retention rules, auditability, and human review.
-- **Testing:** a manual checklist is provided, but it is not evidence that every test has passed.
+- CSRF protection is enabled for unsafe requests.
+- Staff and student login routes have IP-based rate limits; production requires shared Redis-compatible storage.
+- Username-only password recovery has been disabled until verified institutional recovery is integrated.
+- Session attendance CSV exports are restricted to administrators and audit logged.
+- Missing check-ins can be flagged for human review after a session; reconciliation does not automatically declare a student absent.
+- `/healthz` provides a minimal database readiness probe, not full monitoring or alerting.
+- The current database is SQLite. PostgreSQL migration has **not** been completed.
+- Evidence files remain on private local storage. Encryption at rest, malware scanning, managed object storage and retention automation remain outstanding.
+- No biometric data is captured or processed. Manual/student-card checks remain the available alternative.
+- No university SIS, SSO or institutional email integration is connected.
+
+See [Production readiness](docs/PRODUCTION_READINESS.md), [Data governance](docs/DATA_GOVERNANCE.md), and the [Infrastructure and integration plan](docs/INFRASTRUCTURE_AND_INTEGRATION_PLAN.md) for the outstanding controls and institutional approval gates.
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md) for manual checks covering setup, authentication, role access, record workflows, incident handling, and analysis. No automated test suite is currently included.
+Automated tests run in GitHub Actions. The current verified application commit completed **19 unit tests successfully**; this is not a substitute for browser end-to-end, security, load, accessibility, disaster-recovery or institutional acceptance testing.
+
+See [docs/TESTING.md](docs/TESTING.md) and [the latest successful workflow](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43296018137).
+
+## Institutional development
+
+The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
+
+- [Institutional development roadmap](docs/INSTITUTIONAL_ROADMAP.md)
+- [Production-readiness checklist](docs/PRODUCTION_READINESS.md)
+- [Data governance and biometric safeguards](docs/DATA_GOVERNANCE.md)
+- [Infrastructure, PostgreSQL and institutional integration plan](docs/INFRASTRUCTURE_AND_INTEGRATION_PLAN.md)
+
+The application remains a configurable development build. University-specific data mappings, API endpoints, authentication providers, retention periods and biometric decisions require formal institutional input and authorization.
 
 ## Future improvements
 
-- Automated unit and integration tests.
-- CSRF protection and stronger input validation.
-- Verified account recovery using secure, expiring reset tokens.
-- Audit logs for important administrative actions.
-- Database migrations and backup/restore procedures.
-- Configurable review rules and governance controls.
-- Accessibility and usability testing.
-- Production deployment documentation and monitoring.
+- PostgreSQL repository-layer refactor and rehearsed data migration.
+- Full role-based authorization, MFA, account-level throttling and session revocation.
+- Encrypted evidence object storage, malware scanning and retention/legal-hold automation.
+- Independent reviewer assignment, separation of duties and formal appeals.
+- Full timetable, attendance and PDF reporting workflows.
+- Authorized SIS, institutional identity and email integrations.
+- Browser end-to-end, penetration, performance, accessibility and recovery testing.
 
 ## Author
 

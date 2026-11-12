@@ -13,6 +13,16 @@ Use this checklist to verify the application in a local development environment.
 - [ ] Start the application with `python app.py`.
 - [ ] Confirm the application opens at the local URL printed by Flask.
 
+## Automated registry tests
+
+Run the current automated unit tests from the repository root:
+
+```powershell
+python -m unittest discover -v
+```
+
+The automated suite covers additive registry and operations schemas, preservation of existing student records, student field normalization, academic-status validation, linked profile persistence, candidate/attendance uniqueness constraints, and incident/student-response schema constraints. GitHub Actions also compiles the application modules before running the tests. This remains a small unit-test foundation, not full application, security, upload, concurrency, or end-to-end coverage.
+
 ## Manual test cases
 
 | ID | Area | Action | Expected result | Result |
@@ -31,6 +41,26 @@ Use this checklist to verify the application in a local development environment.
 | T12 | Incident review | Mark an open incident as resolved | Its status changes to resolved | Not run |
 | T13 | Analysis | Review synthetic Watch, High, and Critical examples | Categories follow the documented rules | Not run |
 | T14 | Logout | Log out and revisit a protected route | The protected page requires the appropriate role | Not run |
+| T15 | Registry access | Open `/admin/registry/students` while signed out or as an invigilator | Access is redirected to sign-in | Not run |
+| T16 | Registry | Create a student with a unique admission number | Student and linked profile appear in the registry | Not run |
+| T17 | Registry | Attempt a duplicate admission number or institutional email | Duplicate is rejected without partial student creation | Not run |
+| T18 | Registry | Edit an existing student | Existing student and profile are updated without losing incident links | Not run |
+| T19 | CSV import | Import a valid UTF-8 CSV | Valid rows are inserted and import totals are shown | Not run |
+| T20 | CSV import | Include a duplicate or invalid row | That row is skipped without leaving a partial student record | Not run |
+| T21 | Privacy boundary | Inspect registry forms and database schema | No face image, face embedding, or biometric template is captured or stored | Not run |
+| T22 | Audit | Create, edit, and import registry records | Corresponding registry audit events are recorded | Not run |
+| T23 | Academic operations | Create a unit and enrol an active student | Enrolment is saved for the selected academic year and semester | Not run |
+| T24 | Examination sessions | Create a session linked to a unit | Eligible active enrolments populate the candidate list | Not run |
+| T25 | Venue scheduling | Attempt to overlap two sessions in one venue | Conflicting venue booking is rejected | Not run |
+| T26 | Invigilator assignment | Assign an invigilator to overlapping sessions | Overlapping assignment is rejected | Not run |
+| T27 | Attendance | Check a candidate in and out | Timestamps and audit events are recorded; duplicate events are rejected | Not run |
+| T28 | Authorization | Open an unassigned session as an invigilator | Access is denied | Not run |
+| T29 | Student portal | Provision an account and sign in with temporary password | Student must change password before portal access | Not run |
+| T30 | Student privacy | Open the student portal | Only that student's own profile, enrolments, sessions and incidents are shown | Not run |
+| T31 | Student response | Request a response and submit it from the student portal | One immutable response is recorded and visible to authorized reviewer | Not run |
+| T32 | Evidence | Upload an invalid type or oversized file | Upload is rejected | Not run |
+| T33 | Evidence | Upload valid PDF/JPEG/PNG and download as administrator | File checksum is stored and download access is audited | Not run |
+| T34 | Biometric boundary | Inspect attendance UI and provider configuration | No facial matching is claimed or enabled | Not run |
 
 ## Recording results
 

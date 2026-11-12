@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if student else 'Register' }} Student | EIMS{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><p class="eyebrow">Institutional student records</p><h1>{{ 'Update Student Record' if student else 'Register Student' }}</h1><p class="page-subtitle">The admission number is the unique institutional student identifier.</p></div>
+</header>
+<section class="panel form-panel">
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <h2>Identity and admission</h2>
+    <label for="admission_number">Admission number *</label>
+    <input id="admission_number" name="admission_number" maxlength="60" required value="{{ student.student_number if student else '' }}">
+    <label for="first_name">First name *</label>
+    <input id="first_name" name="first_name" maxlength="80" required value="{{ student.first_name if student else '' }}">
+    <label for="last_name">Last name *</label>
+    <input id="last_name" name="last_name" maxlength="80" required value="{{ student.last_name if student else '' }}">
+    <label for="course">Programme / course *</label>
+    <input id="course" name="course" maxlength="160" required value="{{ student.course if student else '' }}">
+    <label for="year_of_study">Year of study</label>
+    <input id="year_of_study" name="year_of_study" type="number" min="1" max="10" value="{{ student.year_of_study if student and student.year_of_study else '' }}">
+    <h2>Academic placement</h2>
+    <label for="faculty">School / faculty</label>
+    <input id="faculty" name="faculty" maxlength="160" value="{{ student.faculty if student else '' }}">
+    <label for="department">Department</label>
+    <input id="department" name="department" maxlength="160" value="{{ student.department if student else '' }}">
+    <label for="academic_year">Academic year</label>
+    <input id="academic_year" name="academic_year" maxlength="20" placeholder="e.g. 2026/2027" value="{{ student.academic_year if student else '' }}">
+    <label for="semester">Current semester</label>
+    <input id="semester" name="semester" maxlength="40" placeholder="e.g. Semester 1" value="{{ student.semester if student else '' }}">
+    <label for="academic_status">Academic status</label>
+    <select id="academic_status" name="academic_status">
+      {% for value in ['active','deferred','suspended','graduated','withdrawn'] %}
+      <option value="{{ value }}" {% if student and student.academic_status == value %}selected{% elif not student and value == 'active' %}selected{% endif %}>{{ value|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <h2>Institutional contact details</h2>
+    <label for="institutional_email">Institutional email</label>
+    <input id="institutional_email" name="institutional_email" type="email" maxlength="160" value="{{ student.institutional_email if student else '' }}">
+    <label for="phone">Phone number</label>
+    <input id="phone" name="phone" type="tel" maxlength="40" value="{{ student.phone if student else '' }}">
+    <p class="field-hint">Only collect contact details required for authorized university operations. Do not enter biometric data or personal information into notes.</p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{ 'Save Student Record' if student else 'Create Student Record' }}</button>
+      <a class="btn btn-ghost" href="{{ url_for('registry.students') }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

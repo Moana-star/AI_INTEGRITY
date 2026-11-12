@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Institutional Student Registry | EIMS{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Institutional records</p>
+    <h1>Student Registry</h1>
+    <p class="page-subtitle">Authoritative student records keyed by unique admission number.</p>
+    <p class="record-count">{{ students|length }} record(s) shown</p>
+  </div>
+  <div class="quick-actions">
+    <a class="btn btn-ghost" href="{{ url_for('registry.import_students') }}">Import CSV</a>
+    <a class="btn btn-primary" href="{{ url_for('registry.new_student') }}">Add Student</a>
+  </div>
+</header>
+<section class="panel">
+  <form method="GET" class="registry-search">
+    <label for="q">Search student records</label>
+    <div class="quick-actions">
+      <input id="q" name="q" type="search" value="{{ query }}" placeholder="Admission number, name, programme or department">
+      <button class="btn btn-primary" type="submit">Search</button>
+      {% if query %}<a class="btn btn-ghost" href="{{ url_for('registry.students') }}">Clear</a>{% endif %}
+    </div>
+  </form>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Admission number</th><th>Student</th><th>Programme</th><th>Faculty / Department</th><th>Year / Semester</th><th>Academic status</th><th>Action</th></tr></thead>
+      <tbody>
+      {% for student in students %}
+        <tr>
+          <td><strong>{{ student.student_number }}</strong></td>
+          <td>{{ student.first_name }} {{ student.last_name }}<small class="cell-note">{{ student.institutional_email or 'Institutional email not recorded' }}</small></td>
+          <td>{{ student.course or 'Not recorded' }}</td>
+          <td>{{ student.faculty or '—' }}<small class="cell-note">{{ student.department or 'Department not recorded' }}</small></td>
+          <td>{{ student.year_of_study or '—' }}<small class="cell-note">{{ student.academic_year or '' }} {{ student.semester or '' }}</small></td>
+          <td><span class="badge badge-{{ 'active' if student.academic_status == 'active' else 'scheduled' }}">{{ student.academic_status|capitalize }}</span></td>
+          <td><a class="btn btn-sm btn-ghost" href="{{ url_for('registry.edit_student', student_id=student.id) }}">View / Edit</a><form method="post" action="{{ url_for('student_portal.provision_account', student_id=student.id) }}" class="inline-form"><button class="btn btn-sm btn-ghost" type="submit">Provision / reset portal</button></form></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="empty-row">No student records match this search.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<p class="field-hint">Use authorized institutional records only. This registry does not currently perform identity or biometric verification.</p>
+{% endblock %}

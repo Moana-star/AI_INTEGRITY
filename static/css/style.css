@@ -739,3 +739,13 @@ button { font-family: inherit; }
 @media (max-width: 560px) { .account-details { grid-template-columns: 1fr; } .dashboard-stat-grid .stat-card { padding: 14px; } }
 @media print { body { background: #fff; color: #000; } .sidebar, .print-action, .app-footer, .quick-actions, .text-link { display: none !important; } .main-content { padding: 0; } .panel, .stat-grid { box-shadow: none; break-inside: avoid; border-color: #999; } .report-track { border: 1px solid #aaa; } }
 @media (max-width: 600px) { .overview-stats { grid-template-columns: 1fr; } .overview-stats > div, .overview-stats > div + div { border-left: 0; border-top: 1px solid var(--rule); padding: 12px 0; } .overview-stats > div:first-child { border-top: 0; } .landing-wide { padding: 32px 24px; } .capability-list { grid-template-columns: 1fr; } .section-heading { align-items: flex-start; flex-direction: column; } }
+
+
+/* Institutional student registry */
+.registry-search { display: grid; gap: 8px; margin-bottom: 20px; max-width: 760px; }
+.registry-search .quick-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.registry-search input[type="search"] { flex: 1 1 280px; min-width: 0; }
+.form-panel h2 { margin: 22px 0 10px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 1.15rem; }
+.form-panel h2:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+.form-panel select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit; }
+.code-sample { overflow-x: auto; padding: 14px; margin: 10px 0 14px; background: var(--paper); border: 1px solid var(--rule); color: var(--ink); font-size: 0.82rem; white-space: pre-wrap; overflow-wrap: anywhere; }

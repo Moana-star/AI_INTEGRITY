@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Academic Operations | EIMS{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div><p class="eyebrow">INSTITUTIONAL OPERATIONS</p><h1>Academic operations</h1>
+  <p class="muted">Manage academic units, enrolments, examination sessions and invigilator assignments.</p></div>
+</section>
+{% if is_admin %}
+<div class="dashboard-grid" style="align-items:start">
+  <section class="panel form-panel">
+    <h2>Create academic unit</h2>
+    <form method="post" action="{{ url_for('operations.create_unit') }}" class="stack-form">
+      <label>Unit code<input name="unit_code" maxlength="25" required placeholder="CSC 201"></label>
+      <label>Unit name<input name="unit_name" maxlength="160" required placeholder="Data Structures and Algorithms"></label>
+      <label>Department<input name="department" maxlength="160"></label>
+      <label>Faculty / school<input name="faculty" maxlength="160"></label>
+      <button class="button button-primary" type="submit">Save academic unit</button>
+    </form>
+  </section>
+  <section class="panel form-panel">
+    <h2>Register student for a unit</h2>
+    <form method="post" action="{{ url_for('operations.enrol_student') }}" class="stack-form">
+      <label>Student<select name="student_id" required><option value="">Choose student</option>{% for s in students %}<option value="{{ s.id }}">{{ s.student_number }} — {{ s.first_name }} {{ s.last_name }}</option>{% endfor %}</select></label>
+      <label>Academic unit<select name="unit_id" required><option value="">Choose unit</option>{% for u in units %}<option value="{{ u.id }}">{{ u.unit_code }} — {{ u.unit_name }}</option>{% endfor %}</select></label>
+      <label>Academic year<input name="academic_year" required placeholder="2026/2027"></label>
+      <label>Semester<input name="semester" required placeholder="Semester 1"></label>
+      <button class="button button-primary" type="submit">Record enrolment</button>
+    </form>
+  </section>
+  <section class="panel form-panel">
+    <h2>Register examination venue</h2>
+    <form method="post" action="{{ url_for('operations.create_venue') }}" class="stack-form">
+      <label>Venue code<input name="venue_code" required placeholder="HALL-A"></label>
+      <label>Building<input name="building" placeholder="Main campus"></label>
+      <label>Room name<input name="room_name" required placeholder="Lecture Hall A"></label>
+      <label>Capacity<input name="capacity" type="number" min="1" max="10000" required></label>
+      <button class="button button-primary" type="submit">Save venue</button>
+    </form>
+  </section>
+  <section class="panel form-panel">
+    <h2>Create examination session</h2>
+    <form method="post" action="{{ url_for('operations.create_session') }}" class="stack-form">
+      <label>Session code<input name="session_code" required placeholder="CSC201-2026-S1-A"></label>
+      <label>Existing examination<select name="examination_id" required><option value="">Choose examination</option>{% for e in exams %}<option value="{{ e.id }}">{{ e.course_code }} — {{ e.examination_name }}</option>{% endfor %}</select></label>
+      <label>Linked academic unit<select name="unit_id" required><option value="">Choose unit</option>{% for u in units %}<option value="{{ u.id }}">{{ u.unit_code }} — {{ u.unit_name }}</option>{% endfor %}</select></label>
+      <label>Academic year<input name="academic_year" required placeholder="2026/2027"></label>
+      <label>Semester<input name="semester" required placeholder="Semester 1"></label>
+      <label>Venue<select name="venue_id"><option value="">Not assigned</option>{% for v in venues %}<option value="{{ v.id }}">{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} seats)</option>{% endfor %}</select></label>
+      <label>Examination date<input type="date" name="session_date" min="{{ today }}" required></label>
+      <div class="form-row"><label>Start time<input type="time" name="start_time" required></label><label>End time<input type="time" name="end_time" required></label></div>
+      <button class="button button-primary" type="submit">Create session and candidate list</button>
+    </form>
+  </section>
+</div>
+{% endif %}
+<section class="panel" style="margin-top:24px">
+  <div class="panel-heading"><div><h2>Examination sessions</h2><p class="muted">Invigilators see only sessions assigned to their account.</p></div></div>
+  {% if sessions %}
+  <div class="table-wrap"><table><thead><tr><th>Session</th><th>Examination</th><th>Date & time</th><th>Venue</th><th>Candidates</th><th>Action</th></tr></thead><tbody>
+  {% for s in sessions %}<tr><td><strong>{{ s.session_code }}</strong><br><small>{{ s.academic_year }} · {{ s.semester }}</small></td><td>{{ s.course_code }}<br><small>{{ s.examination_name }}</small></td><td>{{ s.session_date }}<br>{{ s.start_time }}–{{ s.end_time }}</td><td>{{ s.venue_code or 'Not assigned' }}<br><small>{{ s.room_name or '' }}</small></td><td>{{ s.candidate_count }}<br><small>{{ s.status|title }}</small></td><td><a class="button button-secondary" href="{{ url_for('operations.attendance', session_id=s.id) }}">Open attendance</a> <a class="button button-secondary" href="{{ url_for('operations.export_attendance_csv', session_id=s.id) }}">Export CSV</a>
+  {% if is_admin %}<form method="post" action="{{ url_for('operations.update_session_status', session_id=s.id) }}" class="inline-form"><select name="status" aria-label="Session status"><option value="active" {% if s.status == 'active' %}selected{% endif %}>Activate</option><option value="completed">Complete</option><option value="cancelled">Cancel</option></select><button class="button button-secondary" type="submit">Update status</button></form><form method="post" action="{{ url_for('operations.refresh_candidates', session_id=s.id) }}"><button class="button button-secondary" type="submit">Refresh candidates</button></form><form method="post" action="{{ url_for('operations.assign_invigilator', session_id=s.id) }}" class="inline-form"><select name="invigilator_id" required aria-label="Invigilator">{% for i in invigilators %}<option value="{{ i.id }}">{{ i.employee_number }} — {{ i.first_name }} {{ i.last_name }}</option>{% endfor %}</select><button class="button button-secondary" type="submit">Assign</button></form>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="empty-state">No examination sessions have been created or assigned yet.</p>{% endif %}
+</section>
+{% if is_admin %}
+<div class="dashboard-grid" style="margin-top:24px">
+  <section class="panel"><h2>Academic units</h2>{% for u in units %}<p><strong>{{ u.unit_code }}</strong> — {{ u.unit_name }}</p>{% else %}<p class="muted">No units recorded.</p>{% endfor %}</section>
+  <section class="panel"><h2>Registered venues</h2>{% for v in venues %}<p><strong>{{ v.venue_code }}</strong> — {{ v.room_name }} · {{ v.capacity }} seats</p>{% else %}<p class="muted">No venues recorded.</p>{% endfor %}</section>
+</div>
+{% endif %}
+{% endblock %}
