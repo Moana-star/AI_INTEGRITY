@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session, flash
 from flask_wtf.csrf import CSRFProtect
 from modules.security import limiter
 import sqlite3
@@ -30,6 +30,22 @@ app.register_blueprint(integrity_bp)
 app.register_blueprint(student_bp)
 
 DATABASE = os.path.join(os.path.dirname(__file__), "database", "exam_integrity.db")
+
+
+@app.get("/healthz")
+def health_check():
+    """Minimal readiness probe; never returns database details or secrets."""
+    connection = None
+    try:
+        connection = get_db_connection()
+        connection.execute("SELECT 1").fetchone()
+        return jsonify({"status": "ok"}), 200
+    except Exception:
+        app.logger.exception("Health check failed")
+        return jsonify({"status": "unavailable"}), 503
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 def get_db_connection():
