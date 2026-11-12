@@ -188,6 +188,11 @@ def create_policy():
                 (policy_code,version,effective_from,rules_json,created_by)
             VALUES (?,?,?,?,?)
         """, (code,version,effective_from,json.dumps(rules),session["user_id"]))
+        policy_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        connection.execute("""INSERT INTO audit_events
+            (actor_user_id,action,entity_type,entity_id,summary)
+            VALUES (?,'create','eligibility_policy',?,'Created an eligibility policy draft requiring independent approval.')""",
+            (session["user_id"], str(policy_id)))
         connection.commit()
         flash("Policy draft saved. It cannot affect eligibility until a different administrator approves it.", "success")
     except sqlite3.IntegrityError:
@@ -219,6 +224,10 @@ def approve_policy(policy_id):
         UPDATE eligibility_policies SET approval_status='approved', approved_by=?,
             approval_reason=?, approved_at=CURRENT_TIMESTAMP WHERE id=?
     """, (session["user_id"],reason,policy_id))
+    connection.execute("""INSERT INTO audit_events
+        (actor_user_id,action,entity_type,entity_id,summary)
+        VALUES (?,'approve','eligibility_policy',?,'Eligibility policy independently approved.')""",
+        (session["user_id"],str(policy_id)))
     connection.commit()
     connection.close()
     flash("Eligibility policy approved with independent administrator review.", "success")
@@ -248,6 +257,10 @@ def evaluate_candidate():
     try:
         decision_id, result, reasons, policy = evaluate(
             connection, student_id, unit_id, year[:20], semester[:40], session["user_id"])
+        connection.execute("""INSERT INTO audit_events
+            (actor_user_id,action,entity_type,entity_id,summary)
+            VALUES (?,'evaluate','eligibility_decision',?,?)""",
+            (session["user_id"],str(decision_id),f"Eligibility evaluation recorded with result {result}."))
         connection.commit()
         flash(f"Eligibility decision {decision_id}: {result.upper()} — " + " ".join(reasons), "success" if result == "eligible" else "error")
     except (ValueError, json.JSONDecodeError):
