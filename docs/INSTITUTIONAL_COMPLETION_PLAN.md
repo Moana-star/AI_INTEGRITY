@@ -110,7 +110,7 @@ The parent branch's 19 unit tests and CI success are inherited evidence only. Th
 ## Latest implementation increment
 
 The institutional completion branch now includes:
-- `modules/access_control.py` and `modules/access_control.py` migration helpers for staff roles.
+- `modules/access_control.py` defines the staff-role policy and additive migration helpers.
 - `modules/eligibility.py` with independently approved, versioned policy evaluation.
 - `modules/appeals.py` with student-initiated appeals and independent review safeguards.
 - Append-only academic history in the institutional registry.
