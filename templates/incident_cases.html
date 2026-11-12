@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Incident Case Review | EIMS{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Examination integrity</p><h1>Incident cases</h1><p class="page-subtitle">Review case status and open the authorized case record.</p></div></header>
+<section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Reported</th><th>Student</th><th>Examination</th><th>Incident</th><th>Severity</th><th>Case status</th><th>Action</th></tr></thead><tbody>
+{% for item in incidents %}<tr><td>{{ item.reported_at }}</td><td>{{ item.student_number or 'Not linked' }}<small class="cell-note">{{ item.first_name or '' }} {{ item.last_name or '' }}</small></td><td>{{ item.course_code or 'Not linked' }}</td><td>{{ item.incident_type }}</td><td>{{ item.severity|capitalize }}</td><td>{{ item.case_status|replace('_',' ')|title }}</td><td><a class="btn btn-sm btn-ghost" href="{{ url_for('integrity.case_detail', incident_id=item.id) }}">Open case</a></td></tr>
+{% else %}<tr><td colspan="7">No incident cases are available to this account.</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}
