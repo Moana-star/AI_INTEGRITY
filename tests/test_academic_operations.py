@@ -24,7 +24,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
                 year_of_study INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE invigilators (id INTEGER PRIMARY KEY, user_id INTEGER);
+            CREATE TABLE invigilators (id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT DEFAULT 'active');
             CREATE TABLE incidents (id INTEGER PRIMARY KEY, status TEXT, student_id INTEGER, examination_id INTEGER, incident_type TEXT, description TEXT, severity TEXT, reported_at TEXT);
             CREATE TABLE examinations (id INTEGER PRIMARY KEY, course_code TEXT, examination_name TEXT, invigilator_id INTEGER);
         """)
@@ -45,6 +45,25 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
         os.unlink(self.path)
+
+    def test_session_activation_requires_venue_capacity_and_two_invigilators(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO users(id) VALUES(1)")
+        connection.execute("INSERT INTO examinations(id,course_code,examination_name) VALUES(1,'CSC201','Data Structures')")
+        connection.execute("INSERT INTO venues(id,venue_code,room_name,capacity) VALUES(1,'HALL-A','Hall A',2)")
+        connection.execute("""
+            INSERT INTO examination_sessions
+                (id,session_code,examination_id,academic_year,semester,venue_id,session_date,start_time,end_time)
+            VALUES(1,'CSC201-S1-A',1,'2026/2027','Semester 1',1,'2026-11-20','09:00','11:00')
+        """)
+        connection.commit()
+        blockers = operations.session_activation_blockers(connection,1)
+        self.assertTrue(any("two active invigilators" in item for item in blockers))
+        connection.execute("INSERT INTO invigilators(id,user_id,status) VALUES(1,1,'active'),(2,2,'active')")
+        connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(1,1),(1,2)")
+        connection.commit()
+        self.assertEqual(operations.session_activation_blockers(connection,1),[])
+        connection.close()
 
     def test_admin_can_export_session_attendance_csv(self):
         connection = sqlite3.connect(self.path)
