@@ -71,6 +71,40 @@ def ensure_schema():
             FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
             FOREIGN KEY (unit_id) REFERENCES academic_units(id)
         );
+
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_user_id INTEGER,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT,
+            summary TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (actor_user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS examination_attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            examination_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            attendance_status TEXT NOT NULL DEFAULT 'present'
+                CHECK (attendance_status IN ('present','absent','late','disputed')),
+            verification_method TEXT NOT NULL DEFAULT 'manual'
+                CHECK (verification_method IN ('manual','student_card','biometric_provider')),
+            verification_status TEXT NOT NULL DEFAULT 'manual_review'
+                CHECK (verification_status IN ('not_attempted','verified','failed','manual_review')),
+            check_in_at TIMESTAMP,
+            check_out_at TIMESTAMP,
+            invigilator_id INTEGER,
+            device_identifier TEXT,
+            override_reason TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (examination_id, student_id),
+            FOREIGN KEY (examination_id) REFERENCES examinations(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY (invigilator_id) REFERENCES invigilators(id)
+        );
     """)
     connection.close()
 
@@ -80,6 +114,13 @@ def prepare_registry():
     if "user_id" not in session or session.get("role") != "admin":
         return redirect(url_for("login"))
     ensure_schema()
+
+
+def _record_audit(connection, action, entity_type, entity_id, summary):
+    connection.execute("""
+        INSERT INTO audit_events (actor_user_id, action, entity_type, entity_id, summary)
+        VALUES (?, ?, ?, ?, ?)
+    """, (session.get("user_id"), action, entity_type, str(entity_id) if entity_id is not None else None, summary))
 
 
 def _clean(value, limit=160):
@@ -176,7 +217,9 @@ def new_student():
         try:
             values = _student_values(request.form)
             connection = get_connection()
-            _save_student(connection, values)
+            student_id = _save_student(connection, values)
+            _record_audit(connection, "create", "student", student_id,
+                          "Student record created through the institutional registry.")
             connection.commit()
             connection.close()
             flash("Student record created in the institutional registry.", "success")
@@ -211,6 +254,8 @@ def edit_student(student_id):
     try:
         values = _student_values(request.form)
         _save_student(connection, values, update=True, student_id=student_id)
+        _record_audit(connection, "update", "student", student_id,
+                      "Student record updated through the institutional registry.")
         connection.commit()
         connection.close()
         flash("Student record updated.", "success")
@@ -258,6 +303,8 @@ def import_students():
                 imported += 1
             except (ValueError, sqlite3.IntegrityError):
                 rejected += 1
+        _record_audit(connection, "import", "student_registry", None,
+                      f"CSV import processed: {imported} inserted; {rejected} skipped.")
         connection.commit()
         connection.close()
         flash(f"CSV import complete: {imported} record(s) imported; {rejected} row(s) skipped. Review the register before operational use.", "success")
