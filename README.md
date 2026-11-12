@@ -1,78 +1,106 @@
 # Examination Integrity Management System (EIMS)
 
-A Flask and SQLite web application for managing examination operations and recording, reviewing, and reporting examination incidents. The system provides separate administrator and invigilator experiences, structured records, and an explainable rule-based student risk analysis.
+A Flask and SQLite web application for managing examination records, invigilator workflows, incident reports, and transparent rule-based incident summaries.
 
-> **Project status:** Academic / demonstration project. The seeded demonstration records are synthetic. Risk labels are rule-based indicators for review; they are not proof of misconduct and should not be used as an automated disciplinary decision.
+**Project type:** Academic / demonstration project  
+**Stack:** Python · Flask · SQLite · HTML · CSS · JavaScript  
+**Repository:** [Moana-star/AI_INTEGRITY](https://github.com/Moana-star/AI_INTEGRITY)
+
+> **Important:** This is an academic demonstration, not a production-ready institutional platform. Seeded records are synthetic. The review categories are rule-based indicators—not predictions, proof of misconduct, or automated disciplinary decisions. Do not enter real student or institutional data.
+
+## Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technology stack](#technology-stack)
+- [Setup and installation](#setup-and-installation)
+- [Demonstration accounts](#demonstration-accounts)
+- [Incident review categories](#incident-review-categories)
+- [Security and limitations](#security-and-limitations)
+- [Testing](#testing)
+- [Future improvements](#future-improvements)
+- [Author](#author)
 
 ## Overview
 
-The Examination Integrity Management System is designed to support the administrative work around examinations. Administrators can manage student, examination, and invigilator records, review incident reports, and view summaries. Invigilators can access their assigned examinations and record observations.
+The Examination Integrity Management System (EIMS) demonstrates how a web application can support examination administration. It provides separate administrator and invigilator workflows, stores structured records in SQLite, and gives administrators a consolidated view of examinations and reported incidents.
 
-The application uses a transparent rules engine to summarize incident patterns. It does not use a trained machine-learning model.
+The analysis feature applies explicit rules to recorded incident data. Despite the interface's AI-analysis wording, **the current implementation does not use artificial intelligence, machine learning, or a trained predictive model**.
 
-## Key features
+## Features
 
-- **Role-based access:** separate administrator and invigilator sign-in experiences.
-- **Account registration:** invigilators can self-register through the registration page.
-- **Student management:** create, view, update, and delete student records, subject to linked-record constraints.
+- **Role-aware sign-in:** administrator and invigilator accounts have different application areas.
+- **Invigilator registration:** self-registration is restricted to the invigilator role.
+- **Student management:** maintain student records used by examination and incident workflows.
 - **Examination management:** manage examination details, schedules, venues, statuses, and invigilator assignments.
-- **Invigilator management:** maintain invigilator records and status.
-- **Incident management:** record incidents with descriptions, severity levels, and open/resolved statuses.
-- **Explainable risk analysis:** summarize incident patterns using explicit rules:
-  - **Watch:** one lower-severity incident.
-  - **High:** two or more recorded incidents, with no high-severity incident.
-  - **Critical:** at least one high-severity incident.
-- **Reports and dashboards:** view examination, incident, and risk summaries.
-- **SQLite persistence:** store application records locally in a SQLite database.
+- **Invigilator management:** maintain invigilator details and status.
+- **Incident reporting:** record incidents against students and examinations, including descriptions, severity, and status.
+- **Incident review:** administrators can review incidents and mark them as resolved.
+- **Explainable incident analysis:** categorize recorded incident patterns using explicit rules and show a reason for each category.
+- **Dashboards and reports:** present examination, incident, and record summaries.
+- **Local persistence:** store application data in SQLite.
 
-## Technology stack
+## Architecture
 
-- Python
-- Flask
-- SQLite
-- HTML
-- CSS
-- JavaScript
-- Werkzeug password hashing (used through Flask's Werkzeug dependency)
+The application uses a simple Flask server-rendered architecture:
 
-## Project structure
+```mermaid
+flowchart TD
+    U[Administrator or Invigilator] --> B[Browser]
+    B <--> F[Flask Application: app.py]
+    F --> A[Session and Role Checks]
+    F --> R[Application Routes]
+    R --> D[SQLite Access]
+    D <--> DB[(SQLite Database)]
+    R --> E[Rule-Based Incident Analysis]
+    E --> R
+    R --> T[Jinja HTML Templates]
+    T --> B
+    B --> S[CSS and JavaScript Assets]
+```
+
+This is a high-level view of the current codebase, not a production deployment diagram.
+
+### Repository structure
 
 ```text
 AI_INTEGRITY/
-├── app.py
+├── app.py                    # Flask routes and application logic
+├── requirements.txt          # Python dependency declaration
 ├── database/
-│   └── database.py
+│   └── database.py           # SQLite schema and demo-data seeding
+├── docs/
+│   ├── ARCHITECTURE.md       # Architecture notes
+│   └── TESTING.md            # Manual verification checklist
 ├── static/
-│   ├── css/
-│   │   └── style.css
-│   └── js/
-│       └── auth.js
-├── templates/
-│   ├── admin_dashboard.html
-│   ├── ai_analysis.html
-│   ├── base.html
-│   ├── examination_form.html
-│   ├── examinations.html
-│   ├── incident_form.html
-│   ├── incidents.html
-│   ├── invigilator_dashboard.html
-│   ├── invigilator_form.html
-│   ├── invigilators.html
-│   ├── login.html
-│   ├── register.html
-│   ├── reports.html
-│   ├── student_form.html
-│   ├── students.html
-│   └── ...
+│   ├── css/style.css
+│   └── js/auth.js
+├── templates/                # Jinja/HTML pages
 └── .gitignore
 ```
 
-## Requirements
+The SQLite database is generated locally during setup and is intentionally excluded from Git.
+
+## Technology stack
+
+| Technology | Purpose |
+|---|---|
+| Python | Application language |
+| Flask | Web framework and routing |
+| SQLite | Relational data storage |
+| Werkzeug | Password hashing and Flask utilities |
+| HTML / Jinja | Server-rendered pages |
+| CSS | User-interface styling |
+| JavaScript | Browser-side interactions |
+
+## Setup and installation
+
+### Prerequisites
 
 - Python 3.9 or newer
 - pip
-
-## Run locally
+- Git
 
 ### 1. Clone the repository
 
@@ -90,105 +118,133 @@ python -m venv v
 .\v\Scripts\Activate.ps1
 ```
 
-If PowerShell blocks activation, you can run the app using the virtual environment's Python executable directly (shown below), or use Command Prompt activation:
+If PowerShell blocks activation, use Command Prompt:
 
 ```cmd
 v\Scripts\activate.bat
 ```
 
-### 3. Install Flask
+Alternatively, use the virtual environment's Python executable directly:
 
-```bash
-python -m pip install Flask
+```powershell
+.\v\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 4. Configure a local administrator account
+### 3. Install dependencies
 
-The database setup script can create demonstration login accounts from environment variables. Set passwords before building the database; do not put real passwords in source code or commit them to Git.
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+### 4. Configure local environment variables
+
+Set a secret key and unique passwords for the optional demonstration accounts before initializing the database.
 
 **Windows PowerShell**
 
 ```powershell
+$env:FLASK_SECRET_KEY = (python -c "import secrets; print(secrets.token_hex(32))")
 $env:DEMO_ADMIN_PASSWORD = "Choose-A-Strong-Local-Password"
 $env:DEMO_INVIGILATOR_PASSWORD = "Choose-Another-Strong-Password"
-$env:FLASK_SECRET_KEY = "Replace-With-A-Long-Random-Secret"
 ```
 
-These values apply to the current PowerShell session. Choose your own passwords and secret; do not reuse the example strings.
+Replace the example passwords with strong, unique values. These variables apply only to the current terminal session. Never commit real credentials or secret keys.
 
-### 5. Create the SQLite database
+### 5. Initialize the database
 
-From the project root, run:
+From the repository root:
 
 ```bash
 python database/database.py
 ```
 
-This creates `database/exam_integrity.db` and seeds synthetic demonstration records. The database file is intentionally excluded from version control by `.gitignore`.
+The script creates the schema and inserts synthetic demonstration records in `database/exam_integrity.db`. The database file is excluded from version control.
 
-If you run the setup script again, it uses `INSERT OR IGNORE` for many seeded records; it is not a substitute for a database migration or backup strategy.
+**Existing database note:** Demo accounts are inserted only when their usernames do not already exist. If you need a fresh local demo database, back up anything you need first. The following command permanently deletes the local database and its contents before recreating it:
 
-### 6. Start the Flask application
+```powershell
+Remove-Item .\database\exam_integrity.db
+python database/database.py
+```
+
+Do not run this command if you need to preserve existing records.
+
+### 6. Start the application
 
 ```bash
 python app.py
 ```
 
-Open the local address printed by Flask in your browser (normally http://127.0.0.1:5000).
+Open the local URL printed in the terminal. The default Flask development address is usually [http://127.0.0.1:5000](http://127.0.0.1:5000).
 
-For local development, you may enable Flask debug mode in PowerShell before starting the app:
+For local development only, debug mode can be enabled in PowerShell:
 
 ```powershell
 $env:FLASK_DEBUG = "1"
 python app.py
 ```
 
-Do not enable debug mode in a public production deployment.
+Never enable Flask debug mode on a public or production deployment.
 
 ## Demonstration accounts
 
-If you set `DEMO_ADMIN_PASSWORD` and `DEMO_INVIGILATOR_PASSWORD` before running `python database/database.py`, the setup script provisions:
+If the corresponding environment variables are set **before** database initialization, the setup script creates:
 
 | Role | Username | Password |
 |---|---|---|
-| Administrator | `admin` | The value you set in `DEMO_ADMIN_PASSWORD` |
-| Invigilator | `jkamau` | The value you set in `DEMO_INVIGILATOR_PASSWORD` |
+| Administrator | `admin` | Value assigned to `DEMO_ADMIN_PASSWORD` |
+| Invigilator | `jkamau` | Value assigned to `DEMO_INVIGILATOR_PASSWORD` |
 
-If the database was already created before setting these variables, set them and run the database setup script again. Use only local demonstration credentials.
+Passwords are not stored in this repository. If these usernames already exist, `INSERT OR IGNORE` does not replace their existing passwords. Invigilators can also register through the registration page.
 
-Invigilators can also register through the application's registration page. Self-registration is restricted to the invigilator role.
+Use these accounts only in a local demonstration environment.
 
-## How the risk analysis works
+## Incident review categories
 
-The analysis is deliberately transparent and deterministic. It counts recorded incidents for each student and assigns a review category using the following rules:
+The current analysis function groups students with recorded incidents and assigns a review category using the following rules:
 
-| Condition | Displayed category |
+| Rule | Category |
 |---|---|
-| At least one high-severity incident | Critical |
-| Two or more incidents, with no high-severity incident | High |
-| One lower-severity incident | Watch |
+| One or more high-severity incidents | **Critical** |
+| Two or more incidents, with no high-severity incident | **High** |
+| One lower-severity incident | **Watch** |
 
-These labels are intended to help administrators prioritize record review. They do not establish intent, guilt, or a finding of academic misconduct. All incidents should be assessed in context and through the institution's established procedures.
+The application provides a short explanation for each category. These labels do not establish whether an incident occurred as alleged, determine intent, establish guilt, or replace a fair institutional review. Records must be assessed in context by an authorized person.
 
-## Important implementation notes
+## Security and limitations
 
-- Passwords are stored as Werkzeug password hashes rather than plaintext.
-- The application uses parameterized SQLite queries for database operations.
-- The Flask secret key should be supplied through the `FLASK_SECRET_KEY` environment variable and kept private.
-- The forgot-password flow is a **local demonstration flow**. It does not send email or verify a user's identity; it is not suitable for production account recovery.
-- The project uses a local SQLite database. For a real institutional deployment, assess database backups, access controls, audit requirements, privacy obligations, HTTPS, CSRF protection, deployment configuration, and operational security before use.
-- Do not commit real student information, passwords, API keys, or a populated local database.
+This repository is intended for learning and demonstration. A dedicated security and operational review is required before any real-world use.
+
+- **Password storage:** passwords are stored using Werkzeug password hashing.
+- **Database access:** the inspected application code uses parameterized SQL queries.
+- **Session secret:** configure `FLASK_SECRET_KEY` with a strong private value. The random fallback in the code is not suitable for stable production sessions across restarts.
+- **Password recovery:** the current forgot/reset-password experience is a local demonstration flow. It does not send a verified recovery email or establish account ownership; it is not secure production account recovery.
+- **Request protection:** implement and verify CSRF protection for state-changing forms before public deployment.
+- **Hosting:** a real deployment needs HTTPS, a production WSGI server, secure environment configuration, backups, monitoring, and an appropriately managed database.
+- **Privacy:** do not use real student information in this demonstration. Institutional use would require authorization, privacy safeguards, retention rules, auditability, and human review.
+- **Testing:** a manual checklist is provided, but it is not evidence that every test has passed.
+
+## Testing
+
+See [docs/TESTING.md](docs/TESTING.md) for manual checks covering setup, authentication, role access, record workflows, incident handling, and analysis. No automated test suite is currently included.
 
 ## Future improvements
 
-Potential extensions include automated tests, stronger account-recovery verification, CSRF protection, audit logging, configurable institutional policies, database migrations, and deployment with a production-grade WSGI server and managed database.
+- Automated unit and integration tests.
+- CSRF protection and stronger input validation.
+- Verified account recovery using secure, expiring reset tokens.
+- Audit logs for important administrative actions.
+- Database migrations and backup/restore procedures.
+- Configurable review rules and governance controls.
+- Accessibility and usability testing.
+- Production deployment documentation and monitoring.
 
 ## Author
 
-**Moana-star**
-
-GitHub: [https://github.com/Moana-star](https://github.com/Moana-star)
+**Moana-star**  
+[GitHub profile](https://github.com/Moana-star)
 
 ---
 
-This repository is an academic software project demonstrating web application development, relational data management, role-based workflows, and explainable rule-based analysis.
+*An academic software project demonstrating Flask web development, relational data management, role-aware workflows, and explainable rule-based analysis.*
