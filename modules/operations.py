@@ -7,11 +7,13 @@ separate biometric provider.
 """
 from __future__ import annotations
 
+import csv
+import io
 import os
 import re
 import sqlite3
 from datetime import date, datetime
-from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, make_response, redirect, render_template, request, session, url_for
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.integrity import ensure_schema as ensure_integrity_schema
 
@@ -691,3 +693,69 @@ def refresh_candidates(session_id):
     connection.close()
     flash(f"Candidate list refreshed. {added} new eligible candidate(s) added.", "success")
     return redirect(url_for("operations.workspace"))
+
+@operations_bp.get("/sessions/<int:session_id>/attendance.csv")
+def export_attendance_csv(session_id):
+    """Export a session-scoped attendance register; restricted to administrators."""
+    if not _require_admin():
+        abort(403)
+    connection = db()
+    exam_session = connection.execute("""
+        SELECT es.session_code, es.session_date, es.start_time, es.end_time,
+               e.course_code, e.examination_name, v.venue_code, v.room_name
+        FROM examination_sessions es
+        JOIN examinations e ON e.id=es.examination_id
+        LEFT JOIN venues v ON v.id=es.venue_id
+        WHERE es.id=?
+    """, (session_id,)).fetchone()
+    if not exam_session:
+        connection.close()
+        abort(404)
+    candidates = connection.execute("""
+        SELECT s.student_number, s.first_name, s.last_name, c.seat_label,
+               COALESCE(a.status, 'not_recorded') AS attendance_status,
+               a.check_in_at, a.check_out_at, a.verification_method,
+               a.verification_status, a.notes
+        FROM session_candidates c
+        JOIN students s ON s.id=c.student_id
+        LEFT JOIN session_attendance a
+          ON a.session_id=c.session_id AND a.student_id=c.student_id
+        WHERE c.session_id=?
+        ORDER BY s.student_number
+    """, (session_id,)).fetchall()
+    _audit(connection, "export_attendance_csv", "examination_session", session_id,
+           f"Exported attendance register for session {exam_session['session_code']}.")
+    connection.commit()
+    connection.close()
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["Examination session", exam_session["session_code"]])
+    writer.writerow(["Examination", exam_session["examination_name"]])
+    writer.writerow(["Course code", exam_session["course_code"]])
+    writer.writerow(["Date", exam_session["session_date"]])
+    writer.writerow(["Scheduled time", f"{exam_session['start_time']}–{exam_session['end_time']}"])
+    writer.writerow(["Venue", " ".join(filter(None, [exam_session["venue_code"], exam_session["room_name"]]))])
+    writer.writerow([])
+    writer.writerow([
+        "Admission number", "First name", "Last name", "Seat",
+        "Attendance status", "Check-in", "Check-out",
+        "Verification method", "Verification status", "Notes",
+    ])
+    for row in candidates:
+        writer.writerow([
+            row["student_number"], row["first_name"], row["last_name"],
+            row["seat_label"] or "", row["attendance_status"],
+            row["check_in_at"] or "", row["check_out_at"] or "",
+            row["verification_method"] or "", row["verification_status"] or "",
+            row["notes"] or "",
+        ])
+    response = make_response("\\ufeff" + output.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="attendance-{exam_session["session_code"]}.csv"'
+    )
+    response.headers["Cache-Control"] = "no-store, private"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
