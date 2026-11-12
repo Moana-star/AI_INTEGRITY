@@ -4,7 +4,7 @@
 <header class="page-header"><div><p class="eyebrow">Invigilator station · identity review</p><h1>{{ exam_session.course_code }} · Candidate identity</h1><p class="page-subtitle">{{ exam_session.examination_name }} · {{ exam_session.session_date }} · {{ exam_session.start_time }}–{{ exam_session.end_time }} · {{ exam_session.session_code }}</p></div><a class="btn btn-ghost" href="{{ url_for('operations.attendance', session_id=exam_session.id) }}">Back to attendance</a></header>
 <section class="panel"><h2>Camera preview (optional)</h2>
 <div class="notice notice-warning"><strong>Preview only:</strong> no facial recognition is active. This page does not capture, upload, compare, template or store face images. A camera preview is not proof of identity, eligibility or attendance. Use the institution-approved manual identity process.</div>
-<div class="camera-preview-shell"><video id="identity-camera-preview" autoplay muted playsinline aria-label="Live camera preview"></video><div id="identity-camera-placeholder">Camera is off. Start preview only when needed.</div></div>
+<div class="camera-preview-shell"><video id="identity-camera-preview" autoplay muted playsinline hidden aria-label="Live camera preview"></video><div id="identity-camera-placeholder">Camera is off. Start preview only when needed.</div></div>
 <div class="quick-actions"><button class="btn btn-primary" type="button" id="identity-camera-start">Start camera preview</button><button class="btn btn-ghost" type="button" id="identity-camera-stop" disabled>Stop camera</button></div>
 <p id="identity-camera-status" class="field-hint" role="status" aria-live="polite">No camera access requested.</p>
 </section>
