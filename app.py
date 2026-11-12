@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask_wtf.csrf import CSRFProtect
 import sqlite3
 import os
 from datetime import datetime
@@ -12,6 +13,7 @@ app = Flask(__name__)
 if os.environ.get("FLASK_ENV") == "production" and not os.environ.get("FLASK_SECRET_KEY"):
     raise RuntimeError("FLASK_SECRET_KEY must be configured for production.")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
+CSRFProtect(app)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "0") == "1",
                   MAX_CONTENT_LENGTH=6 * 1024 * 1024)
