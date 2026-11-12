@@ -19,6 +19,7 @@ A Flask and SQLite web application for managing examination records, invigilator
 - [Incident review categories](#incident-review-categories)
 - [Security and limitations](#security-and-limitations)
 - [Testing](#testing)
+- [Institutional development](#institutional-development)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
@@ -33,6 +34,8 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 - **Role-aware sign-in:** administrator and invigilator accounts have different application areas.
 - **Invigilator registration:** self-registration is restricted to the invigilator role.
 - **Student management:** maintain student records used by examination and incident workflows.
+- **Institutional student registry (initial increment):** maintain admission-number-based profiles, academic placement, institutional contact fields, and academic status; import authorized UTF-8 CSV records.
+- **Registry foundations:** additive profile, academic-unit, enrolment, attendance, and audit-event schema foundations. Not all corresponding workflows are implemented yet.
 - **Examination management:** manage examination details, schedules, venues, statuses, and invigilator assignments.
 - **Invigilator management:** maintain invigilator details and status.
 - **Incident reporting:** record incidents against students and examinations, including descriptions, severity, and status.
@@ -228,6 +231,17 @@ This repository is intended for learning and demonstration. A dedicated security
 ## Testing
 
 See [docs/TESTING.md](docs/TESTING.md) for manual checks covering setup, authentication, role access, record workflows, incident handling, and analysis. No automated test suite is currently included.
+
+## Institutional development
+
+The institutional direction, phased implementation status, and data-governance boundaries are documented here:
+
+- [Institutional development roadmap](docs/INSTITUTIONAL_ROADMAP.md)
+- [Data governance and biometric safeguards](docs/DATA_GOVERNANCE.md)
+
+The first institutional-registry increment is available on the `feature/institutional-eims-foundation` branch. It adds a separate registry interface while preserving the existing student-management routes and legacy student records. The registry creates additive profile and operational schema tables when first accessed.
+
+**Important boundaries:** this increment does not connect to a university student information system, validate official student data, complete unit registration or attendance workflows, or perform facial recognition. The attendance table is a schema foundation only. No face images, embeddings, biometric templates, or liveness recordings are collected. Do not use real student records until institutional authorization, security controls, privacy governance, and a controlled pilot are complete.
 
 ## Future improvements
 
