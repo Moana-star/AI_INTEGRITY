@@ -2,9 +2,9 @@ name: Python tests
 
 on:
   push:
-    branches: ["main", "feature/institutional-eims-foundation"]
+    branches: ["main", "feature/institutional-eims-foundation", "feature/eims-institutional-completion"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "feature/institutional-eims-foundation"]
 
 jobs:
   test:
