@@ -90,7 +90,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
             (id,session_code,examination_id,academic_year,semester,session_date,start_time,end_time,status)
             VALUES(1,'MAT101-S1-A',1,'2026/2027','Semester 1','2020-01-01','09:00','11:00','completed')
         """)
-        connection.execute("INSERT INTO session_candidates(session_id,student_id,seat_label) VALUES(1,1,'SEAT-001')")
+        connection.execute("INSERT INTO session_candidates(session_id,student_id,eligibility_status,eligibility_note,seat_label) VALUES(1,1,'eligible','Approved test policy evaluation','SEAT-001')")
         connection.commit()
         connection.close()
         flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
