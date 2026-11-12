@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Academic History | EIMS{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Registrar workspace</p><h1>Academic history</h1><p class="page-subtitle">{{ student.student_number }} · {{ student.first_name }} {{ student.last_name }}</p><p>Current programme: {{ student.course or 'Not recorded' }} · Current status: {{ student.academic_status|capitalize }}</p></div><a class="btn btn-ghost" href="{{ url_for('registry.students') }}">Back to registry</a></header>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<section class="panel"><h2>Record an academic event</h2>
+<form method="post" action="{{ url_for('registry.academic_history', student_id=student.id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="form-grid">
+<label>Event type<select name="event_type" required><option value="">Choose event</option>{% for kind in event_types %}<option value="{{ kind }}">{{ kind|replace('_',' ')|title }}</option>{% endfor %}</select></label>
+<label>Effective date<input type="date" name="effective_date" required></label>
+<label>Previous value<input name="previous_value" maxlength="240" placeholder="Optional"></label>
+<label>New value<input name="new_value" maxlength="240" placeholder="Required for status changes"></label>
+<label class="form-grid-full">Reason / approved reference<textarea name="reason" minlength="10" maxlength="1000" required></textarea></label>
+</div>
+<p class="field-hint">Record only approved institutional decisions. Entries are append-only; corrections must be made as a new, attributable event.</p>
+<button class="btn btn-primary" type="submit">Record academic event</button>
+</form></section>
+<section class="panel"><h2>Recorded history</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Effective date</th><th>Event</th><th>Previous value</th><th>New value</th><th>Reason</th><th>Recorded by</th><th>Recorded at</th></tr></thead><tbody>
+{% for event in events %}<tr><td>{{ event.effective_date }}</td><td>{{ event.event_type|replace('_',' ')|title }}</td><td>{{ event.previous_value or '—' }}</td><td>{{ event.new_value or '—' }}</td><td>{{ event.reason }}</td><td>{{ event.recorded_by_username }}</td><td>{{ event.recorded_at }}</td></tr>{% else %}<tr><td colspan="7" class="empty-row">No academic history events have been recorded.</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}
