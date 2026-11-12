@@ -42,7 +42,7 @@
     <form method="post" action="{{ url_for('operations.create_session') }}" class="stack-form">
       <label>Session code<input name="session_code" required placeholder="CSC201-2026-S1-A"></label>
       <label>Existing examination<select name="examination_id" required><option value="">Choose examination</option>{% for e in exams %}<option value="{{ e.id }}">{{ e.course_code }} — {{ e.examination_name }}</option>{% endfor %}</select></label>
-      <label>Linked academic unit<select name="unit_id"><option value="">Not linked</option>{% for u in units %}<option value="{{ u.id }}">{{ u.unit_code }} — {{ u.unit_name }}</option>{% endfor %}</select></label>
+      <label>Linked academic unit<select name="unit_id" required><option value="">Choose unit</option>{% for u in units %}<option value="{{ u.id }}">{{ u.unit_code }} — {{ u.unit_name }}</option>{% endfor %}</select></label>
       <label>Academic year<input name="academic_year" required placeholder="2026/2027"></label>
       <label>Semester<input name="semester" required placeholder="Semester 1"></label>
       <label>Venue<select name="venue_id"><option value="">Not assigned</option>{% for v in venues %}<option value="{{ v.id }}">{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} seats)</option>{% endfor %}</select></label>
