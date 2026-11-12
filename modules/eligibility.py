@@ -123,7 +123,11 @@ def evaluate(connection, student_id, unit_id, academic_year, semester, actor_id)
     if policy is None:
         reasons.append("No currently effective, institution-approved eligibility policy is configured.")
     else:
-        rules = validate_rules(json.loads(policy["rules_json"]))
+        try:
+            rules = validate_rules(json.loads(policy["rules_json"]))
+        except (ValueError, TypeError, json.JSONDecodeError):
+            reasons.append("The approved policy version is incomplete or invalid for the current Kisii rule set; manual policy review is required.")
+            rules = None
         student = connection.execute("""
             SELECT s.id, COALESCE(p.academic_status,'active') AS academic_status
             FROM students s LEFT JOIN student_profiles p ON p.student_id=s.id
@@ -139,7 +143,9 @@ def evaluate(connection, student_id, unit_id, academic_year, semester, actor_id)
             SELECT * FROM eligibility_evidence
             WHERE student_id=? AND unit_id=? AND academic_year=? AND semester=?
         """, (student_id, unit_id, academic_year, semester)).fetchone()
-        if not student or not unit:
+        if rules is None:
+            pass
+        elif not student or not unit:
             reasons.append("Student or academic unit could not be verified against the institutional registry.")
         elif not unit["active"]:
             result = "ineligible"
