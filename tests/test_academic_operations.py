@@ -105,6 +105,19 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         self.assertIn(b"not_recorded", response.data)
         self.assertEqual(response.headers.get("Cache-Control"), "no-store, private")
 
+    def test_registrar_cannot_view_or_record_exam_attendance(self):
+        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
+        client = flask_app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["user_id"] = 1
+            browser_session["role"] = "registrar"
+        view = client.get("/operations/sessions/999/attendance")
+        record = client.post("/operations/sessions/999/attendance/999", data={
+            "event_type":"check_in","verification_method":"manual"
+        })
+        self.assertEqual(view.status_code,403)
+        self.assertEqual(record.status_code,403)
+
     def test_invigilator_cannot_export_attendance_csv(self):
         flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
         client = flask_app.test_client()
