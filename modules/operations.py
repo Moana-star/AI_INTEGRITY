@@ -334,11 +334,11 @@ def create_session():
                   AND e.enrolment_status='registered'
                   AND COALESCE(p.academic_status,'active')='active'
             """, (unit_id, year, semester)).fetchall()
-            for candidate in candidates:
+            for seat_number, candidate in enumerate(candidates, start=1):
                 connection.execute("""
-                    INSERT INTO session_candidates(session_id, student_id, eligibility_status)
-                    VALUES (?, ?, 'eligible')
-                """, (session_id, candidate["student_id"]))
+                    INSERT INTO session_candidates(session_id, student_id, eligibility_status, seat_label)
+                    VALUES (?, ?, 'eligible', ?)
+                """, (session_id, candidate["student_id"], f"SEAT-{seat_number:03d}"))
         candidate_count = len(candidates) if unit_id else 0
         if venue and candidate_count > venue["capacity"]:
             connection.rollback()
