@@ -11,8 +11,8 @@ class InstitutionalRegistryTests(unittest.TestCase):
     def setUp(self):
         handle, self.database_path = tempfile.mkstemp(suffix=".sqlite3")
         os.close(handle)
-        with sqlite3.connect(self.database_path) as connection:
-            connection.executescript("""
+        connection = sqlite3.connect(self.database_path)
+        connection.executescript("""
                 CREATE TABLE users (id INTEGER PRIMARY KEY);
                 CREATE TABLE students (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,6 +26,7 @@ class InstitutionalRegistryTests(unittest.TestCase):
                 CREATE TABLE invigilators (id INTEGER PRIMARY KEY);
                 CREATE TABLE examinations (id INTEGER PRIMARY KEY);
             """)
+        connection.close()
         self.database_patch = patch.object(registry, "DATABASE", self.database_path)
         self.database_patch.start()
         registry.ensure_schema()
@@ -35,20 +36,22 @@ class InstitutionalRegistryTests(unittest.TestCase):
         os.unlink(self.database_path)
 
     def test_creates_profile_tables_without_replacing_existing_students(self):
-        with registry.get_connection() as connection:
-            connection.execute("""
-                INSERT INTO students (student_number, first_name, last_name, course)
-                VALUES ('REG/001', 'Amina', 'Otieno', 'Computer Science')
-            """)
-            connection.commit()
+        connection = registry.get_connection()
+        connection.execute("""
+            INSERT INTO students (student_number, first_name, last_name, course)
+            VALUES ('REG/001', 'Amina', 'Otieno', 'Computer Science')
+        """)
+        connection.commit()
+        connection.close()
         registry.ensure_schema()
-        with registry.get_connection() as connection:
-            student = connection.execute(
-                "SELECT student_number FROM students WHERE student_number='REG/001'"
-            ).fetchone()
-            tables = {row["name"] for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )}
+        connection = registry.get_connection()
+        student = connection.execute(
+            "SELECT student_number FROM students WHERE student_number='REG/001'"
+        ).fetchone()
+        tables = {row["name"] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        connection.close()
         self.assertEqual(student["student_number"], "REG/001")
         self.assertIn("student_profiles", tables)
         self.assertIn("examination_attendance", tables)
@@ -89,14 +92,15 @@ class InstitutionalRegistryTests(unittest.TestCase):
             "department": "Computing",
             "academic_status": "active",
         })
-        with registry.get_connection() as connection:
-            student_id = registry._save_student(connection, values)
-            connection.commit()
-            row = connection.execute("""
-                SELECT s.student_number, p.faculty, p.department
-                FROM students s JOIN student_profiles p ON p.student_id=s.id
-                WHERE s.id=?
-            """, (student_id,)).fetchone()
+        connection = registry.get_connection()
+        student_id = registry._save_student(connection, values)
+        connection.commit()
+        row = connection.execute("""
+            SELECT s.student_number, p.faculty, p.department
+            FROM students s JOIN student_profiles p ON p.student_id=s.id
+            WHERE s.id=?
+        """, (student_id,)).fetchone()
+        connection.close()
         self.assertEqual(row["student_number"], "REG/004")
         self.assertEqual(row["faculty"], "School of Computing")
         self.assertEqual(row["department"], "Computing")
