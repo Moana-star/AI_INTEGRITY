@@ -13,6 +13,16 @@ Use this checklist to verify the application in a local development environment.
 - [ ] Start the application with `python app.py`.
 - [ ] Confirm the application opens at the local URL printed by Flask.
 
+## Automated registry tests
+
+Run the current automated unit tests from the repository root:
+
+```powershell
+python -m unittest discover -v
+```
+
+The initial registry tests cover additive schema creation, preservation of existing student records, field normalization, academic-status validation, and linked profile persistence. They do not constitute full application, security, import-file, or end-to-end coverage.
+
 ## Manual test cases
 
 | ID | Area | Action | Expected result | Result |
@@ -31,6 +41,14 @@ Use this checklist to verify the application in a local development environment.
 | T12 | Incident review | Mark an open incident as resolved | Its status changes to resolved | Not run |
 | T13 | Analysis | Review synthetic Watch, High, and Critical examples | Categories follow the documented rules | Not run |
 | T14 | Logout | Log out and revisit a protected route | The protected page requires the appropriate role | Not run |
+| T15 | Registry access | Open `/admin/registry/students` while signed out or as an invigilator | Access is redirected to sign-in | Not run |
+| T16 | Registry | Create a student with a unique admission number | Student and linked profile appear in the registry | Not run |
+| T17 | Registry | Attempt a duplicate admission number or institutional email | Duplicate is rejected without partial student creation | Not run |
+| T18 | Registry | Edit an existing student | Existing student and profile are updated without losing incident links | Not run |
+| T19 | CSV import | Import a valid UTF-8 CSV | Valid rows are inserted and import totals are shown | Not run |
+| T20 | CSV import | Include a duplicate or invalid row | That row is skipped without leaving a partial student record | Not run |
+| T21 | Privacy boundary | Inspect registry forms and database schema | No face image, face embedding, or biometric template is captured or stored | Not run |
+| T22 | Audit | Create, edit, and import registry records | Corresponding registry audit events are recorded | Not run |
 
 ## Recording results
 
