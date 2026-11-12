@@ -41,6 +41,15 @@ def ensure_schema():
             FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
             FOREIGN KEY(updated_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS incident_case_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incident_id INTEGER NOT NULL UNIQUE,
+            student_id INTEGER NOT NULL,
+            response_text TEXT NOT NULL,
+            submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
+            FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE
+        );
         CREATE TABLE IF NOT EXISTS incident_review_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             incident_id INTEGER NOT NULL,
