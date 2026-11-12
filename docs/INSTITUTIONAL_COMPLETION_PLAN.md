@@ -27,7 +27,7 @@
 ### 2. Timetable and examination sessions
 - Added generated venue row/seat layouts with explicit accessible-seat labels.
 - Added Registrar/Admin accommodation records containing only approved accessible-seat and extra-time flags plus a source reference; no diagnosis is collected.
-- Added session seat allocation that reserves accessible seats for approved accommodations and carries approved extra time into the session assignment.
+- Accommodation changes are retained in append-only history. Session seat allocation reserves accessible seats for approved accommodations and carries approved extra time into the invigilator station.
 - Session activation now requires an active venue within capacity and at least two active invigilators, based on the published handbook.
 - Existing scheduling checks detect candidate, venue and invigilator overlaps.
 - Remaining: calendar/list views, bulk import, rescheduling, cancellation history, concurrency-safe reservations, room closure, setup buffers, lecturer-as-chief-invigilator mapping and browser acceptance.
