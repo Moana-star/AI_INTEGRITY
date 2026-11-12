@@ -11,7 +11,7 @@ import io
 import os
 import re
 import sqlite3
-from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
 registry_bp = Blueprint("registry", __name__, url_prefix="/admin/registry")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -287,7 +287,7 @@ def import_students():
     try:
         text = raw.decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(text))
-        headers = {header.strip() for header in (reader.fieldnames or [])}
+        headers = {header.strip() for header in (reader.fieldnames or []) if header and header.strip()}
         missing = CSV_FIELDS - headers
         if missing:
             return render_template("student_registry_import.html",
