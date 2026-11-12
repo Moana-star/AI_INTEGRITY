@@ -35,7 +35,6 @@
                 <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Academic Enrolments</a>
                 {% elif session.get('role') == 'examination_officer' %}
                 <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Examination Operations</a>
-                <a href="{{ url_for('integrity.case_detail', incident_id=1) }}">Incident Review</a>
                 {% elif session.get('role') == 'student' %}
                 <a href="{{ url_for('student_portal.portal') }}">My student portal</a>
                 {% else %}
