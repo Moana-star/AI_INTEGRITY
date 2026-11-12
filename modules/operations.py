@@ -354,6 +354,24 @@ def create_session():
                     VALUES (?, ?, 'eligible', ?)
                 """, (session_id, candidate["student_id"], f"SEAT-{seat_number:03d}"))
         candidate_count = len(candidates)
+        if candidates:
+            conflict = connection.execute("""
+                SELECT 1 FROM session_candidates existing
+                JOIN examination_sessions other ON other.id=existing.session_id
+                WHERE existing.student_id IN (
+                    SELECT student_id FROM session_candidates WHERE session_id=?
+                )
+                  AND other.id!=? AND other.session_date=?
+                  AND other.status NOT IN ('cancelled','completed')
+                  AND other.start_time < ? AND other.end_time > ?
+                LIMIT 1
+            """, (session_id, session_id, session_date.isoformat(),
+                  end.strftime("%H:%M"), start.strftime("%H:%M"))).fetchone()
+            if conflict:
+                connection.rollback()
+                connection.close()
+                flash("One or more candidates are already registered for an overlapping examination session.", "error")
+                return redirect(url_for("operations.workspace"))
         if venue and candidate_count > venue["capacity"]:
             connection.rollback()
             connection.close()
@@ -556,6 +574,39 @@ def record_attendance(session_id, student_id):
     connection.commit()
     connection.close()
     flash("Attendance event recorded and audit logged.", "success")
+    return redirect(url_for("operations.attendance", session_id=session_id))
+
+
+@operations_bp.post("/sessions/<int:session_id>/attendance/<int:student_id>/status")
+def set_attendance_exception(session_id, student_id):
+    if not _require_admin():
+        abort(403)
+    status = (request.form.get("status") or "").strip()
+    reason = " ".join((request.form.get("reason") or "").split())[:500]
+    if status not in {"absent", "disputed"} or len(reason) < 10:
+        flash("Choose absent or disputed and provide a reason of at least 10 characters.", "error")
+        return redirect(url_for("operations.attendance", session_id=session_id))
+    connection = db()
+    candidate = connection.execute("""
+        SELECT 1 FROM session_candidates WHERE session_id=? AND student_id=?
+    """, (session_id, student_id)).fetchone()
+    if not candidate:
+        connection.close()
+        abort(404)
+    connection.execute("""
+        INSERT INTO session_attendance(session_id, student_id, status, verification_method,
+            verification_status, verified_by, notes, updated_at)
+        VALUES (?, ?, ?, 'manual', 'manual_review', ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(session_id, student_id) DO UPDATE SET
+            status=excluded.status, verification_status='manual_review',
+            verified_by=excluded.verified_by, notes=excluded.notes,
+            updated_at=CURRENT_TIMESTAMP
+    """, (session_id, student_id, status, session.get("user_id"), reason))
+    _audit(connection, "attendance_exception", "session_attendance", f"{session_id}:{student_id}",
+           f"Attendance marked {status}: {reason}")
+    connection.commit()
+    connection.close()
+    flash(f"Attendance status updated to {status}.", "success")
     return redirect(url_for("operations.attendance", session_id=session_id))
 
 
