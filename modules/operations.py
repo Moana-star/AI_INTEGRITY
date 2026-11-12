@@ -306,8 +306,8 @@ def create_session():
         return redirect(url_for("operations.workspace"))
     year = (form.get("academic_year") or "").strip()
     semester = (form.get("semester") or "").strip()
-    if not year or not semester:
-        flash("Academic year and semester are required.", "error")
+    if not year or not semester or not unit_id:
+        flash("Academic year, semester and linked academic unit are required to determine examination eligibility.", "error")
         return redirect(url_for("operations.workspace"))
     connection = db()
     exam = connection.execute("SELECT id FROM examinations WHERE id=?", (examination_id,)).fetchone()
