@@ -10,6 +10,7 @@ import os
 import sqlite3
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from modules.integrity import ensure_schema as ensure_integrity_schema
+from modules.institutional_registry import ensure_schema as ensure_registry_schema
 
 appeals_bp = Blueprint("appeals", __name__, url_prefix="/appeals")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -73,6 +74,7 @@ def prepare():
     role = session.get("role")
     if role not in {"admin", "examination_officer", "student"}:
         abort(403)
+    ensure_registry_schema()
     ensure_integrity_schema()
     ensure_schema()
 
