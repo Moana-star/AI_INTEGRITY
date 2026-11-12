@@ -25,6 +25,7 @@
                 <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Academic Operations</a>
                 <a href="{{ url_for('eligibility.workspace') }}" {% if request.blueprint == 'eligibility' %}class="active" aria-current="page"{% endif %}>Eligibility Policies</a>
                 <a href="{{ url_for('integrity.case_list') }}" {% if request.endpoint == 'integrity.case_list' %}class="active" aria-current="page"{% endif %}>Incident Cases</a>
+                <a href="{{ url_for('appeals.staff_queue') }}" {% if request.blueprint == 'appeals' %}class="active" aria-current="page"{% endif %}>Student Appeals</a>
                 <a href="{{ url_for('admin_examinations') }}" {% if request.endpoint in ['admin_examinations','add_examination','edit_examination'] %}class="active" aria-current="page"{% endif %}>Examinations</a>
                 <a href="{{ url_for('admin_invigilators') }}" {% if request.endpoint in ['admin_invigilators','add_invigilator','edit_invigilator'] %}class="active" aria-current="page"{% endif %}>Invigilators</a>
                 <a href="{{ url_for('admin_incidents') }}" {% if request.endpoint in ['admin_incidents','add_incident'] %}class="active" aria-current="page"{% endif %}>Incidents</a>
