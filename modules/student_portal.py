@@ -10,6 +10,7 @@ from modules.institutional_registry import ensure_schema as ensure_registry_sche
 from modules.operations import ensure_schema as ensure_operations_schema
 from modules.integrity import ensure_schema as ensure_integrity_schema
 from modules.security import limiter
+from modules.appeals import ensure_schema as ensure_appeals_schema
 
 student_bp = Blueprint("student_portal", __name__, url_prefix="/student")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -60,6 +61,7 @@ def prepare():
         ensure_registry_schema()
         ensure_operations_schema()
         ensure_integrity_schema()
+        ensure_appeals_schema()
         ensure_schema()
         SCHEMA_READY = True
 
@@ -132,9 +134,11 @@ def portal():
     """, (session["student_id"],)).fetchall()
     incidents = connection.execute("""
         SELECT i.id, i.incident_type, i.description, i.severity, i.reported_at,
-               w.case_status, w.student_response_due, r.submitted_at AS response_submitted_at
+               w.case_status, w.student_response_due, r.submitted_at AS response_submitted_at,
+               a.appeal_status, a.submitted_at AS appeal_submitted_at
         FROM incidents i LEFT JOIN incident_case_workflow w ON w.incident_id=i.id
         LEFT JOIN incident_case_responses r ON r.incident_id=i.id
+        LEFT JOIN incident_appeals a ON a.incident_id=i.id
         WHERE i.student_id=? ORDER BY i.reported_at DESC
     """, (session["student_id"],)).fetchall()
     connection.close()
