@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1c2431">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Examination Integrity Management System{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/csrf.js') }}" defer></script>
 </head>
 <body>
     {% if (session.get('user_id') or session.get('student_id')) and request.endpoint not in ['login', 'register', 'forgot_password', 'reset_password', 'student_portal.login'] %}
