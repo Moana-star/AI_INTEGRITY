@@ -158,14 +158,22 @@ def workspace():
         SELECT id, employee_number, first_name, last_name
         FROM invigilators WHERE status='active' ORDER BY employee_number
     """).fetchall()
-    sessions = connection.execute("""
+    session_sql = """
         SELECT es.*, e.course_code, e.examination_name, v.venue_code, v.room_name,
                (SELECT COUNT(*) FROM session_candidates c WHERE c.session_id=es.id) AS candidate_count
         FROM examination_sessions es
         JOIN examinations e ON e.id=es.examination_id
         LEFT JOIN venues v ON v.id=es.venue_id
-        ORDER BY es.session_date DESC, es.start_time DESC
-    """).fetchall()
+    """
+    if _require_admin():
+        sessions = connection.execute(session_sql + " ORDER BY es.session_date DESC, es.start_time DESC").fetchall()
+    else:
+        sessions = connection.execute(session_sql + """
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=?
+            ORDER BY es.session_date DESC, es.start_time DESC
+        """, (session.get("user_id"),)).fetchall()
     exams = connection.execute("SELECT id, course_code, examination_name FROM examinations ORDER BY examination_date DESC").fetchall()
     connection.close()
     return render_template("operations_workspace.html", units=units, students=students,
@@ -284,7 +292,6 @@ def create_session():
         examination_id = int(form.get("examination_id", ""))
         unit_id = int(form.get("unit_id", "")) if form.get("unit_id") else None
         venue_id = int(form.get("venue_id", "")) if form.get("venue_id") else None
-        capacity = int(form.get("capacity", "0"))
         session_date = datetime.strptime(form.get("session_date", ""), "%Y-%m-%d").date()
         start = datetime.strptime(form.get("start_time", ""), "%H:%M").time()
         end = datetime.strptime(form.get("end_time", ""), "%H:%M").time()
@@ -305,10 +312,6 @@ def create_session():
     if not exam or (unit_id and not unit) or (venue_id and not venue):
         connection.close()
         flash("Select an existing examination, active unit and active venue.", "error")
-        return redirect(url_for("operations.workspace"))
-    if venue and capacity > venue["capacity"]:
-        connection.close()
-        flash("Expected candidate count cannot exceed venue capacity.", "error")
         return redirect(url_for("operations.workspace"))
     try:
         cursor = connection.execute("""
@@ -334,10 +337,16 @@ def create_session():
                     INSERT INTO session_candidates(session_id, student_id, eligibility_status)
                     VALUES (?, ?, 'eligible')
                 """, (session_id, candidate["student_id"]))
+        candidate_count = len(candidates) if unit_id else 0
+        if venue and candidate_count > venue["capacity"]:
+            connection.rollback()
+            connection.close()
+            flash("The enrolled candidate count exceeds the selected venue capacity. Choose a larger venue or correct enrolments.", "error")
+            return redirect(url_for("operations.workspace"))
         _audit(connection, "create", "examination_session", session_id,
                f"Created examination session {code}; candidate list derived from registered enrolments.")
         connection.commit()
-        flash(f"Examination session created with {len(candidates) if unit_id else 0} eligible candidate(s).", "success")
+        flash(f"Examination session created with {candidate_count} eligible candidate(s).", "success")
     except sqlite3.IntegrityError:
         connection.rollback()
         flash("Session code already exists or the session conflicts with a database constraint.", "error")
