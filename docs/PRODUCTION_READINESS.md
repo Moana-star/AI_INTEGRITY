@@ -18,6 +18,14 @@ This checklist distinguishes implemented development workflows from the work req
 - Private evidence file storage, file-size/type checks, SHA-256 checksums and administrator-only download audit.
 - Automated Python compilation and unit-test workflow.
 
+## Security hardening already applied on this branch
+
+- The legacy username-only password-recovery flow has been disabled. Knowing or guessing a username must never authorize a password change.
+- The password-reset page no longer accepts a new password until a verified institutional recovery channel is integrated.
+- Regression tests cover attempts to use the former flow, including a forged legacy reset-session value.
+
+This is a targeted account-takeover fix, not a substitute for the remaining controls below. CSRF protection, login throttling, MFA, full RBAC, secure session lifecycle and comprehensive authorization tests remain required.
+
 ## Required before any real student data
 
 ### Institutional and legal approval
