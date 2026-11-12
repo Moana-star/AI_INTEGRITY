@@ -74,6 +74,34 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         response = client.get("/operations/sessions/1/attendance.csv")
         self.assertEqual(response.status_code, 403)
 
+    def test_reconciliation_flags_missing_checkin_for_review_not_absence(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO users(id) VALUES(1)")
+        connection.execute("INSERT INTO students(student_number,first_name,last_name) VALUES('REG/002','Brian','Kiptoo')")
+        connection.execute("INSERT INTO examinations(id,course_code,examination_name) VALUES(1,'MAT101','Calculus')")
+        connection.execute("""
+            INSERT INTO examination_sessions
+            (id,session_code,examination_id,academic_year,semester,session_date,start_time,end_time,status)
+            VALUES(1,'MAT101-S1-A',1,'2026/2027','Semester 1','2020-01-01','09:00','11:00','completed')
+        """)
+        connection.execute("INSERT INTO session_candidates(session_id,student_id,seat_label) VALUES(1,1,'SEAT-001')")
+        connection.commit()
+        connection.close()
+        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
+        client = flask_app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["user_id"] = 1
+            browser_session["role"] = "admin"
+        page = client.get("/operations/sessions/1/attendance")
+        import re
+        token = re.search(rb'<meta name="csrf-token" content="([^"]+)"', page.data).group(1).decode()
+        response = client.post("/operations/sessions/1/reconcile-attendance", data={"csrf_token": token})
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        result = connection.execute("SELECT status, verification_status FROM session_attendance WHERE session_id=1 AND student_id=1").fetchone()
+        connection.close()
+        self.assertEqual(result, ("disputed", "manual_review"))
+
     def test_operational_tables_are_created(self):
         connection = sqlite3.connect(self.path)
         tables = {row[0] for row in connection.execute(
