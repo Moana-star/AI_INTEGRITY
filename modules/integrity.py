@@ -35,6 +35,7 @@ def ensure_schema():
             case_status TEXT NOT NULL DEFAULT 'reported'
                 CHECK(case_status IN ('reported','under_review','student_response_requested','reviewed','resolved','dismissed','referred')),
             student_response_due TEXT,
+            reported_by INTEGER,
             updated_by INTEGER,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
@@ -90,6 +91,9 @@ def ensure_schema():
             FOREIGN KEY(actor_user_id) REFERENCES users(id)
         );
     """)
+    workflow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(incident_case_workflow)").fetchall()}
+    if "reported_by" not in workflow_columns:
+        connection.execute("ALTER TABLE incident_case_workflow ADD COLUMN reported_by INTEGER")
     connection.execute("""
         INSERT OR IGNORE INTO incident_case_workflow(incident_id, case_status)
         SELECT id, CASE WHEN status='resolved' THEN 'resolved' ELSE 'reported' END FROM incidents
@@ -181,8 +185,11 @@ def update_case_status(incident_id):
     if not exists:
         connection.close()
         abort(404)
-    current = connection.execute("SELECT case_status FROM incident_case_workflow WHERE incident_id=?", (incident_id,)).fetchone()
+    current = connection.execute("SELECT case_status, reported_by FROM incident_case_workflow WHERE incident_id=?", (incident_id,)).fetchone()
     previous = current["case_status"] if current else "reported"
+    if current and current["reported_by"] == session.get("user_id"):
+        connection.close()
+        abort(403, description="A staff member may not review or decide an incident they reported.")
     connection.execute("""
         INSERT INTO incident_case_workflow(incident_id, case_status, student_response_due, updated_by, updated_at)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
