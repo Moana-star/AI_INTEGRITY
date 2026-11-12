@@ -11,7 +11,7 @@ import os
 import re
 import sqlite3
 from datetime import date, datetime
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.integrity import ensure_schema as ensure_integrity_schema
 
