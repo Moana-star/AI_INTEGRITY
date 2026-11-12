@@ -21,7 +21,7 @@ Run the current automated unit tests from the repository root:
 python -m unittest discover -v
 ```
 
-The initial registry tests cover additive schema creation, preservation of existing student records, field normalization, academic-status validation, and linked profile persistence. They do not constitute full application, security, import-file, or end-to-end coverage.
+The initial registry tests cover additive schema creation, preservation of existing student records, field normalization, academic-status validation, and linked profile persistence. A GitHub Actions workflow runs this command for pushes to the feature branch and pull requests targeting main. The tests do not constitute full application, security, import-file, or end-to-end coverage.
 
 ## Manual test cases
 
