@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Students | Examination Integrity{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>Students</h1><p class="page-subtitle">Manage registered students and their examination records.</p><p class="record-count">{{ students|length }} registered student(s)</p></div><a href="{{ url_for('add_student') }}" class="btn btn-primary">Add Student</a></header>
+<section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Student Number</th><th>Name</th><th>Course</th><th>Year</th><th>Actions</th></tr></thead><tbody>
+{% for student in students %}<tr><td><strong>{{ student.student_number }}</strong></td><td>{{ student.first_name }} {{ student.last_name }}</td><td>{{ student.course or 'Not recorded' }}</td><td>{{ student.year_of_study or 'Not recorded' }}</td><td class="actions-cell"><a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-sm btn-ghost">Edit</a><form method="POST" action="{{ url_for('delete_student', student_id=student.id) }}" class="inline-form" onsubmit="return confirm('Delete this student record?');"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form></td></tr>{% else %}<tr><td colspan="5" class="empty-row">No students are registered yet. Add a student to begin the register.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

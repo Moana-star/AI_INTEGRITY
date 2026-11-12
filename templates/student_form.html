@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if student else 'Add' }} Student{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>{{ 'Edit' if student else 'Add' }} Student</h1><p class="page-subtitle">Maintain the student register used for examination and incident records.</p></div>
+</div>
+
+<div class="panel form-panel">
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+        <label for="student_number">Student Number</label>
+        <input type="text" id="student_number" name="student_number" value="{{ student.student_number if student else '' }}" required>
+
+        <label for="first_name">First Name</label>
+        <input type="text" id="first_name" name="first_name" value="{{ student.first_name if student else '' }}" required>
+
+        <label for="last_name">Last Name</label>
+        <input type="text" id="last_name" name="last_name" value="{{ student.last_name if student else '' }}" required>
+
+        <label for="course">Course</label>
+        <input type="text" id="course" name="course" value="{{ student.course if student else '' }}">
+
+        <label for="year_of_study">Year of Study</label>
+        <input type="number" id="year_of_study" name="year_of_study" min="1" max="6" value="{{ student.year_of_study if student else '' }}">
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ 'Save Changes' if student else 'Add Student' }}</button>
+            <button type="reset" class="btn btn-ghost">Reset</button>
+            <a href="{{ url_for('admin_students') }}" class="btn btn-ghost">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

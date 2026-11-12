@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if invigilator else 'Add' }} Invigilator{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>{{ 'Edit' if invigilator else 'Add' }} Invigilator</h1><p class="page-subtitle">Maintain staff details for examination assignments.</p></div>
+</div>
+
+<div class="panel form-panel">
+    {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+    <form method="POST">
+        <label for="employee_number">Employee Number</label>
+        <input type="text" id="employee_number" name="employee_number" value="{{ invigilator.employee_number if invigilator else '' }}" required>
+
+        <label for="first_name">First Name</label>
+        <input type="text" id="first_name" name="first_name" value="{{ invigilator.first_name if invigilator else '' }}" required>
+
+        <label for="last_name">Last Name</label>
+        <input type="text" id="last_name" name="last_name" value="{{ invigilator.last_name if invigilator else '' }}" required>
+
+        <label for="phone">Phone</label>
+        <input type="text" id="phone" name="phone" value="{{ invigilator.phone if invigilator else '' }}">
+
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="active" {{ 'selected' if invigilator and invigilator.status == 'active' }}>Active</option>
+            <option value="inactive" {{ 'selected' if invigilator and invigilator.status == 'inactive' }}>Inactive</option>
+        </select>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ 'Save Changes' if invigilator else 'Add Invigilator' }}</button>
+            <button type="reset" class="btn btn-ghost">Reset</button>
+            <a href="{{ url_for('admin_invigilators') }}" class="btn btn-ghost">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

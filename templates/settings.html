@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Settings | Examination Integrity{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>Account Settings</h1><p class="page-subtitle">Review your signed-in account and access role.</p></div></header>
+<section class="panel account-panel"><div class="section-heading"><div><h2>Signed-in Account</h2><p class="muted">Your permissions follow the role assigned to this account.</p></div></div><dl class="account-details"><div><dt>Username</dt><dd>{{ username }}</dd></div><div><dt>Role</dt><dd>{{ session.get('role')|capitalize }}</dd></div></dl><form method="POST" action="{{ url_for('logout') }}"><button class="btn btn-ghost" type="submit">Sign out</button></form></section>
+{% endblock %}

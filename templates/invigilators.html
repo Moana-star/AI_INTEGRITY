@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Invigilators | Examination Integrity{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>Invigilators</h1><p class="page-subtitle">Manage staff who supervise examination sittings.</p><p class="record-count">{{ invigilators|length }} registered invigilator(s)</p></div><a href="{{ url_for('add_invigilator') }}" class="btn btn-primary">Add Invigilator</a></header>
+<section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Employee Number</th><th>Name</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+{% for inv in invigilators %}<tr><td><strong>{{ inv.employee_number }}</strong></td><td>{{ inv.first_name }} {{ inv.last_name }}</td><td>{{ inv.phone or 'Not recorded' }}</td><td><span class="badge badge-{{ inv.status }}">{{ inv.status|capitalize }}</span></td><td class="actions-cell"><a href="{{ url_for('edit_invigilator', invigilator_id=inv.id) }}" class="btn btn-sm btn-ghost">Edit</a><form method="POST" action="{{ url_for('delete_invigilator', invigilator_id=inv.id) }}" class="inline-form" onsubmit="return confirm('Delete this invigilator?');"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form></td></tr>{% else %}<tr><td colspan="5" class="empty-row">No invigilators are registered yet.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

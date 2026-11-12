@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} | Examination Integrity Management System{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ page_title }}</h1>
+        <p class="page-subtitle">{{ page_description }}</p>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="module-empty">
+        <div class="module-empty-mark" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 3L20 7V12C20 16.5 16.8 20.7 12 22C7.2 20.7 4 16.5 4 12V7L12 3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                <path d="M9 12.2L11.2 14.5L15.5 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <h2>{{ page_title }}</h2>
+        <p>{{ page_description }}</p>
+        <span class="module-status">Available</span>
+        <a href="{{ url_for('admin_dashboard') }}" class="module-back">Back to dashboard</a>
+    </div>
+</div>
+{% endblock %}

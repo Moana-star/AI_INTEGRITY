@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Invigilator Dashboard | Examination Integrity{% endblock %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">Invigilator Workspace</p><h1>{{ invigilator.first_name if invigilator else session.get('username') }}</h1><p class="page-subtitle"><span class="badge badge-active">Invigilator</span> You are logged in as an Invigilator. Your assigned examinations and incident reporting are available here.</p></div><a href="{{ url_for('add_incident') }}" class="btn btn-primary">Report Incident</a></div>
+<section class="panel"><div class="section-heading"><div><h2>Assigned Examinations</h2><p class="muted">Your examination duties and reporting links</p></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Course</th><th>Examination</th><th>Date</th><th>Time</th><th>Venue</th><th>Status</th><th>Action</th></tr></thead><tbody>
+{% for exam in assigned_exams %}<tr><td>{{ exam.course_code }}</td><td>{{ exam.examination_name }}</td><td>{{ exam.examination_date }}</td><td>{{ exam.start_time }} - {{ exam.end_time }}</td><td>{{ exam.venue or 'To be confirmed' }}</td><td><span class="badge badge-{{ exam.status }}">{{ exam.status|capitalize }}</span></td><td><a class="btn btn-sm btn-ghost" href="{{ url_for('add_incident') }}">Report incident</a></td></tr>{% else %}<tr><td colspan="7" class="empty-row">No examinations are currently assigned to you.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

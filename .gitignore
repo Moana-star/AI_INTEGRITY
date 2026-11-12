@@ -1,0 +1,13 @@
+v/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.vscode/
+.pytest_cache/
+*.log
+instance/
+database/*.db
+database/*.sqlite
+database/*.sqlite3

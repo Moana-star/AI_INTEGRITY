@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if examination else 'Schedule' }} Examination{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>{{ 'Edit' if examination else 'Schedule' }} Examination</h1><p class="page-subtitle">Set the examination details, venue, assigned invigilator and status.</p></div>
+</div>
+
+<div class="panel form-panel">
+    {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+    <form method="POST">
+        <label for="course_code">Course Code</label>
+        <input type="text" id="course_code" name="course_code" value="{{ examination.course_code if examination else '' }}" required>
+
+        <label for="examination_name">Examination Name</label>
+        <input type="text" id="examination_name" name="examination_name" value="{{ examination.examination_name if examination else '' }}" required>
+
+        <label for="examination_date">Date</label>
+        <input type="date" id="examination_date" name="examination_date" value="{{ examination.examination_date if examination else '' }}" required>
+
+        <label for="start_time">Start Time</label>
+        <input type="time" id="start_time" name="start_time" value="{{ examination.start_time if examination else '' }}" required>
+
+        <label for="end_time">End Time</label>
+        <input type="time" id="end_time" name="end_time" value="{{ examination.end_time if examination else '' }}" required>
+
+        <label for="venue">Venue</label>
+        <input type="text" id="venue" name="venue" value="{{ examination.venue if examination else '' }}">
+
+        <label for="invigilator_id">Invigilator</label>
+        <select id="invigilator_id" name="invigilator_id">
+            <option value="">Unassigned</option>
+            {% for inv in invigilators %}
+            <option value="{{ inv.id }}" {{ 'selected' if examination and examination.invigilator_id == inv.id }}>
+                {{ inv.first_name }} {{ inv.last_name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            {% for s in ['scheduled', 'ongoing', 'completed', 'cancelled'] %}
+            <option value="{{ s }}" {{ 'selected' if examination and examination.status == s }}>{{ s|capitalize }}</option>
+            {% endfor %}
+        </select>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ 'Save Changes' if examination else 'Schedule Examination' }}</button>
+            <button type="reset" class="btn btn-ghost">Reset</button>
+            <a href="{{ url_for('admin_examinations') }}" class="btn btn-ghost">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

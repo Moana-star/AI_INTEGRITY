@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Report Incident | Examination Integrity{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>Report Incident</h1><p class="page-subtitle">Record an examination incident for staff review and follow-up.</p></div></header>
+<section class="panel form-panel">{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<form method="POST"><label for="student_id">Student</label><select id="student_id" name="student_id" required><option value="">Select student</option>{% for student in students %}<option value="{{ student.id }}">{{ student.student_number }} - {{ student.first_name }} {{ student.last_name }}</option>{% endfor %}</select>
+<label for="examination_id">Examination</label><select id="examination_id" name="examination_id" required><option value="">Select examination</option>{% for exam in examinations %}<option value="{{ exam.id }}">{{ exam.course_code }} - {{ exam.examination_date }}</option>{% endfor %}</select>
+<label for="incident_type">Incident Type</label><select id="incident_type" name="incident_type" required><option value="">Select incident category</option><option>Smartphone / Mobile Phone</option><option>Smartwatch / Wearable Device</option><option>Unauthorized Electronic Device</option><option>Unauthorized Communication</option><option>Unauthorized Material</option><option>Suspicious Examination Behaviour</option><option>Other Examination Incident</option></select><small class="field-hint">Choose the closest category and describe the observed circumstances below.</small>
+<label for="severity">Severity</label><select id="severity" name="severity" required><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
+<label for="description">Description</label><textarea id="description" name="description" rows="4" placeholder="Describe the observed circumstances..." ></textarea>
+<div class="form-actions"><button type="submit" class="btn btn-primary">Submit Report</button><button type="reset" class="btn btn-ghost">Clear Form</button><a href="{{ url_for('admin_dashboard') if session.get('role') == 'admin' else url_for('invigilator_dashboard') }}" class="btn btn-ghost">Cancel</a></div></form></section>
+{% endblock %}
