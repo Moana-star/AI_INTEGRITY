@@ -113,6 +113,8 @@ def prepare():
         return redirect(url_for("login"))
     if not SCHEMA_READY:
         ensure_registry_schema()
+        from modules.operations import ensure_schema as ensure_operations_schema
+        ensure_operations_schema()
         ensure_schema()
         SCHEMA_READY = True
 
