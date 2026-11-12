@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Incident Case Review | EIMS{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">INCIDENT INVESTIGATION</p><h1>Case #{{ incident.id }}</h1><p class="muted">{{ incident.student_number }} · {{ incident.first_name }} {{ incident.last_name }} · {{ incident.course_code }}</p></div><a class="button button-secondary" href="{{ url_for('admin_incidents') }}">Back to incidents</a></section>
+<div class="dashboard-grid" style="align-items:start">
+<section class="panel"><h2>Reported incident</h2><p><strong>{{ incident.incident_type }}</strong></p><p>{{ incident.description or 'No narrative supplied.' }}</p><p>Severity: {{ incident.severity|title }} · Legacy status: {{ incident.status|title }}</p><p>Examination: {{ incident.examination_name or 'Not linked' }}</p><p>Reported: {{ incident.reported_at }}</p></section>
+<section class="panel"><h2>Case workflow</h2><p><strong>Current status:</strong> {{ incident.case_status or 'reported'|replace('_',' ')|title }}</p><p class="muted">Statuses are administrative workflow markers, not findings of guilt.</p>
+{% if is_admin %}<form method="post" action="{{ url_for('integrity.update_case_status', incident_id=incident.id) }}" class="stack-form">
+<label>New status<select name="case_status" required>{% for status in statuses %}<option value="{{ status }}" {% if status == incident.case_status %}selected{% endif %}>{{ status|replace('_',' ')|title }}</option>{% endfor %}</select></label>
+<label>Student response due (optional)<input type="date" name="student_response_due"></label>
+<label>Review note<textarea name="review_note" minlength="10" maxlength="2000" required placeholder="Record the factual basis for this workflow update."></textarea></label>
+<button class="button button-primary" type="submit">Save review decision</button></form>{% else %}<p>Only authorized reviewers can change case status.</p>{% endif %}</section>
+</div>
+<section class="panel" style="margin-top:20px"><h2>Evidence register</h2><p class="muted">Files are stored outside the public static directory. The system records a SHA-256 checksum for integrity verification.</p>
+{% if evidence %}<div class="table-wrap"><table><thead><tr><th>File</th><th>Description</th><th>Size</th><th>SHA-256</th><th>Added</th><th>Access</th></tr></thead><tbody>{% for file in evidence %}<tr><td>{{ file.original_filename }}</td><td>{{ file.description }}</td><td>{{ (file.file_size / 1024)|round(1) }} KB</td><td><code>{{ file.sha256 }}</code></td><td>{{ file.created_at }}</td><td>{% if is_admin %}<a href="{{ url_for('integrity.download_evidence', evidence_id=file.id) }}">Download</a>{% else %}Restricted to reviewers{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">No supporting evidence has been attached.</p>{% endif %}
+<form method="post" enctype="multipart/form-data" action="{{ url_for('integrity.upload_evidence', incident_id=incident.id) }}" class="stack-form" style="max-width:560px;margin-top:20px">
+<label>Evidence file (PDF, PNG or JPEG; maximum 5 MB)<input type="file" name="evidence" accept=".pdf,.png,.jpg,.jpeg" required></label>
+<label>Evidence description<input name="description" maxlength="500" required placeholder="Describe what this file contains and who collected it."></label>
+<button class="button button-primary" type="submit">Upload evidence</button></form>
+</section>
+<section class="panel" style="margin-top:20px"><h2>Review history</h2>{% for event in events %}<article class="timeline-item"><p><strong>{{ event.from_status or 'Initial'|replace('_',' ')|title }} → {{ event.to_status|replace('_',' ')|title }}</strong></p><p>{{ event.review_note }}</p><small>{{ event.username }} · {{ event.created_at }}</small></article>{% else %}<p class="empty-state">No review actions have been recorded.</p>{% endfor %}</section>
+{% endblock %}
