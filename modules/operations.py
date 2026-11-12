@@ -732,6 +732,8 @@ def update_session_status(session_id):
 
 @operations_bp.get("/sessions/<int:session_id>/attendance")
 def attendance(session_id):
+    if session.get("role") not in {"admin","examination_officer","invigilator"}:
+        abort(403)
     connection = db()
     session_row = connection.execute("""
         SELECT es.*, e.course_code, e.examination_name, v.venue_code, v.room_name
@@ -766,8 +768,8 @@ def attendance(session_id):
 
 @operations_bp.post("/sessions/<int:session_id>/attendance/<int:student_id>")
 def record_attendance(session_id, student_id):
-    if not _require_staff():
-        return redirect(url_for("login"))
+    if session.get("role") not in {"admin","examination_officer","invigilator"}:
+        abort(403)
     connection = db()
     session_row = connection.execute("SELECT * FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
     if not session_row:
