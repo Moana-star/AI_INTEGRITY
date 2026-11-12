@@ -97,6 +97,14 @@ def portal():
     if not is_student():
         return redirect(url_for("student_portal.login"))
     connection = db()
+    account = connection.execute("SELECT must_change_password FROM student_portal_accounts WHERE student_id=?", (session["student_id"],)).fetchone()
+    if not account:
+        connection.close()
+        session.clear()
+        return redirect(url_for("student_portal.login"))
+    if account["must_change_password"]:
+        connection.close()
+        return redirect(url_for("student_portal.change_password"))
     student = connection.execute("""
         SELECT s.*, p.faculty, p.department, p.institutional_email, p.phone,
                COALESCE(p.academic_status,'active') AS academic_status
@@ -126,8 +134,6 @@ def portal():
         LEFT JOIN incident_case_responses r ON r.incident_id=i.id
         WHERE i.student_id=? ORDER BY i.reported_at DESC
     """, (session["student_id"],)).fetchall()
-    account = connection.execute("SELECT must_change_password FROM student_portal_accounts WHERE student_id=?",
-                                 (session["student_id"],)).fetchone()
     connection.close()
     return render_template("student_portal.html", student=student, enrolments=enrolments,
                            examinations=examinations, incidents=incidents,
