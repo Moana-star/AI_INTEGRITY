@@ -265,6 +265,10 @@ See [docs/TESTING.md](docs/TESTING.md) and [the latest successful workflow](http
 
 ## Institutional development
 
+The next completion increment is tracked in [pull request #2](https://github.com/Moana-star/AI_INTEGRITY/pull/2), stacked on the institutional foundation branch. It adds a fail-closed, provider-neutral one-to-one biometric verification boundary and a 12-workstream completion plan. It does **not** provide live camera capture or a configured biometric provider.
+
+See [Institutional completion plan](docs/INSTITUTIONAL_COMPLETION_PLAN.md). The completion branch passed 27 automated unit tests in [GitHub Actions](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43297620498); these tests do not establish production readiness.
+
 The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
 
 - [Institutional development roadmap](docs/INSTITUTIONAL_ROADMAP.md)
