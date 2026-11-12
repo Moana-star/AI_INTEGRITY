@@ -132,11 +132,15 @@ def _audit(connection, action, entity, entity_id, summary):
 
 
 def _require_admin():
-    return "user_id" in session and session.get("role") == "admin"
+    return "user_id" in session and session.get("role") in {"admin", "examination_officer"}
+
+
+def _require_registrar():
+    return "user_id" in session and session.get("role") in {"admin", "registrar"}
 
 
 def _require_staff():
-    return "user_id" in session and session.get("role") in {"admin", "invigilator"}
+    return "user_id" in session and session.get("role") in {"admin", "registrar", "examination_officer", "invigilator"}
 
 
 @operations_bp.before_request
@@ -189,7 +193,7 @@ def workspace():
 
 @operations_bp.post("/units")
 def create_unit():
-    if not _require_admin():
+    if not _require_registrar():
         return redirect(url_for("login"))
     code = (request.form.get("unit_code") or "").strip().upper()
     name = " ".join((request.form.get("unit_name") or "").split())
@@ -217,7 +221,7 @@ def create_unit():
 
 @operations_bp.post("/enrolments")
 def enrol_student():
-    if not _require_admin():
+    if not _require_registrar():
         return redirect(url_for("login"))
     try:
         student_id = int(request.form.get("student_id", ""))
