@@ -22,9 +22,10 @@ This checklist distinguishes implemented development workflows from the work req
 
 - The legacy username-only password-recovery flow has been disabled. Knowing or guessing a username must never authorize a password change.
 - The password-reset page no longer accepts a new password until a verified institutional recovery channel is integrated.
-- Regression tests cover attempts to use the former flow, including a forged legacy reset-session value.
+- Flask-WTF CSRF validation is enabled for unsafe HTTP requests. The shared layout exposes a session-bound token, and the form helper attaches it to standard and dynamically submitted forms.
+- Regression tests cover missing CSRF tokens and attempts to use the former reset flow, including a forged legacy reset-session value.
 
-This is a targeted account-takeover fix, not a substitute for the remaining controls below. CSRF protection, login throttling, MFA, full RBAC, secure session lifecycle and comprehensive authorization tests remain required.
+These are targeted security improvements, not a substitute for the remaining controls below. Login throttling, MFA, complete RBAC, secure session lifecycle, and comprehensive authorization testing remain required.
 
 ## Required before any real student data
 
@@ -40,7 +41,7 @@ This is a targeted account-takeover fix, not a substitute for the remaining cont
 ### Security engineering
 
 - [ ] Replace SQLite with a supported PostgreSQL deployment and test migrations.
-- [ ] Implement CSRF protection for all state-changing forms.
+- [x] Implement CSRF protection for state-changing requests; verify every page and non-form client integration during end-to-end testing.
 - [ ] Implement login rate limiting, account lockout policy and MFA for privileged roles.
 - [ ] Replace broad administrator/invigilator roles with least-privilege registrar, examination officer, invigilator, reviewer and system-administrator permissions.
 - [ ] Enforce password reset, recovery, session expiration and session revocation policies.
@@ -88,7 +89,7 @@ This is a targeted account-takeover fix, not a substitute for the remaining cont
 
 - The application still uses SQLite and raw SQLite access throughout the legacy application.
 - The student/staff role model is not yet a complete institutional RBAC model.
-- CSRF protection and login rate limiting are not yet implemented.
+- CSRF validation is enabled; login rate limiting is not yet implemented.
 - Evidence files are private by path and access control, but encrypted storage, malware scanning and retention automation are not yet implemented.
 - The current test suite is a small automated foundation, not comprehensive coverage.
 - The biometric provider is not connected.
