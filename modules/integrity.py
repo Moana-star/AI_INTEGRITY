@@ -6,7 +6,6 @@ import os
 import sqlite3
 from pathlib import Path
 import uuid
-from pathlib import Path
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, session, url_for
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 
