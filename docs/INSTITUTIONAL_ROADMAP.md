@@ -2,96 +2,106 @@
 
 ## Product direction
 
-EIMS is being evolved from a local academic application into an institutional examination operations platform. The target is a system that a university can evaluate and pilot after governance, security, integration, and operational requirements have been satisfied.
-
-**This roadmap is not a claim that the application is already approved or production-ready.** The current repository remains an implementation in progress. Use synthetic data during development and testing.
+EIMS is being developed as a configurable university examination operations platform. The current feature branch adds connected student, academic, examination, attendance, student self-service, and incident-review workflows. It is still a development build and must not be used with real student data until the readiness gates in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) are completed.
 
 ## Product principles
 
-1. The admission number is the unique institutional student identifier.
-2. Authoritative academic records should come from the university registry or an approved export.
-3. Examination eligibility must be based on explicit, reviewable registration rules.
-4. Attendance and identity verification are separate records with clear provenance.
-5. Incident reports document observations and evidence; they do not establish guilt.
-6. Risk indicators support authorized human review and never make disciplinary decisions.
-7. Every sensitive administrative change should be attributable and auditable.
-8. Collect only information needed for a defined institutional purpose.
-9. Students must have a process to challenge inaccurate identity, attendance, or incident records.
-10. Biometric processing remains disabled until institutional authorization and privacy governance are complete.
+1. Admission number is the unique institutional student identifier.
+2. Authoritative academic records must come from the institution or an approved import.
+3. Eligibility must be based on explicit, reviewable enrolment rules.
+4. Attendance and identity verification are distinct, auditable records.
+5. Incident reports document observations; they do not establish guilt.
+6. Students can respond to incidents when a response is requested.
+7. Review indicators never make disciplinary decisions.
+8. Sensitive data is collected only for a defined institutional purpose.
+9. Biometric processing remains disabled until institution approval and privacy governance are complete.
 
-## Delivery phases
+## Current implementation status
 
-### Phase 1 — Student registry foundation
+### Phase 1 — Student registry
 
-**Status: Initial implementation added on the feature branch.**
+**Implemented on the feature branch; needs full local and security verification.**
 
-- Extended student profile records linked to the existing student table.
-- Admission-number-based student register.
+- Admission-number-based student registry and profiles.
 - Academic placement and status fields.
 - Institutional contact fields.
-- CSV onboarding for authorized student records.
-- Academic unit and enrolment schema foundation.
-- Audit-event and examination-attendance schema foundation.
+- UTF-8 CSV import with validation and row-level savepoints.
+- Student profile audit events.
 
-Remaining phase-one work:
-- Automated route and authorization tests.
-- Unit catalogue and student enrolment screens.
-- CSV export, import preview, and reconciliation report.
-- Field-level validation and institutional data mapping.
-- Formal data migration and rollback procedure.
+Remaining: import preview/reconciliation, data mapping, migration/rollback plan, broader authorization tests.
 
-### Phase 2 — Examination operations
+### Phase 2 — Academic and examination operations
 
-- Academic years, semesters, programmes, departments, and units.
-- Examination sessions with dates, times, venue, capacity, and status.
-- Candidate eligibility and session registration.
-- Seat allocation and invigilator assignments.
-- Session-level operational controls.
+**Core workflows implemented on the feature branch; further capabilities remain.**
+
+- Academic unit catalogue creation.
+- Student unit enrolment by academic year and semester.
+- Examination session creation linked to an existing examination.
+- Candidate lists derived from registered active enrolments.
+- Venue registration and candidate-capacity validation.
+- Invigilator assignment.
+- Sequential seat labels.
+- Session status lifecycle.
+
+Remaining: programme/course catalogue normalization, timetable conflict detection, venue scheduling conflict detection, room layout and seat-map configuration, eligibility exceptions, invigilator workload rules, and session completion sign-off.
 
 ### Phase 3 — Attendance and identity assurance
 
-- Session attendance register with present, absent, late, and disputed states.
+**Manual/student-card attendance workflow implemented; biometric verification is not implemented.**
+
+- Session-specific candidate attendance register.
 - Check-in and check-out timestamps.
-- Manual and student-card verification.
-- Exception queue for identity mismatches.
-- Device and invigilator attribution.
-- Optional biometric provider integration only after formal approval, DPIA, lawful-basis review, accuracy testing, alternatives, retention controls, and security review.
+- Manual and student-card verification method recording.
+- Duplicate check-in/check-out prevention.
+- Invigilator attribution and audit events.
+- Student view of examination schedule, seat and attendance.
+
+Remaining: absent/disputed attendance resolution, attendance export and reconciliation, card barcode/QR validation, device registration, offline operation design, exception handling and end-to-end testing.
+
+Biometric identity verification requires an approved provider, institutional authorization, DPIA, lawful-basis review, meaningful alternative, demographic accuracy evaluation, security assessment and retention controls. No face data is captured or matched by this code.
 
 ### Phase 4 — Integrity case management
 
-- Structured incident reports and evidence references.
-- Chain-of-custody events and evidence access history.
-- Student response and correction workflow.
-- Reviewer assignment, decisions, appeals, and referrals.
-- Immutable or tamper-evident audit design.
+**Initial review and evidence workflows implemented; full case management remains.**
+
+- Case workflow statuses: reported, under review, student response requested, reviewed, resolved, dismissed and referred.
+- Reviewer notes and status history.
+- Student portal response submission when requested.
+- Restricted PDF/PNG/JPEG evidence upload.
+- Private evidence storage outside the public static directory.
+- SHA-256 evidence checksum.
+- Administrator-only evidence download with access audit event.
+
+Remaining: formal chain-of-custody procedures, evidence retention/deletion tooling, reviewer assignment, witness statements, appeal workflow, student notifications, response deadlines, legal hold and tamper-evident external audit storage.
 
 ### Phase 5 — Reporting and decision support
 
-- Attendance and examination operations reports.
-- Incident volumes and outcomes.
-- Transparent, configurable review indicators.
-- Bias, accuracy, and impact evaluation for any statistical models.
-- No automated finding of misconduct or disciplinary action.
+**Partially inherited from the original application; institutional reporting remains incomplete.**
+
+- Existing incident summaries and transparent rule-based review indicators remain.
+- Existing dashboard and report views remain available.
+
+Remaining: session attendance rates, absent/late/disputed breakdowns, eligibility and enrolment reconciliation, venue utilization, invigilator workload, case outcomes, semester comparisons, CSV/PDF exports and validated data-quality reporting.
+
+No automated model should infer guilt or make a disciplinary decision.
 
 ### Phase 6 — Institutional readiness and deployment
 
+**Not complete.**
+
 - PostgreSQL migration and managed database operations.
-- Authentication integration, MFA, and least-privilege authorization.
-- CSRF protection, secure session policy, rate limiting, and security testing.
-- Encryption, backup/restore, monitoring, incident response, and disaster recovery.
-- Data protection impact assessment and institutional sign-off.
-- Accessibility and usability testing.
-- Controlled pilot, training, support, and documented operating procedures.
+- University SIS integration and reconciliation.
+- Institutional identity provider, MFA and least-privilege roles.
+- CSRF protection, rate limiting, secure session policy and security testing.
+- Evidence encryption, backups, restore drills, monitoring and incident response.
+- DPIA, legal review, retention schedule and institutional sign-off.
+- Accessibility and user-acceptance testing.
+- Controlled pilot, training and support.
 
-## Current implementation boundaries
+## Configurability
 
-The first registry increment does not provide:
-- A live connection to any university student information system.
-- Verified official student data.
-- Examination eligibility decisions.
-- A complete unit registration workflow.
-- An operational attendance interface.
-- Face detection, face matching, liveness detection, or biometric template storage.
-- Production-grade authentication, hosting, or institutional security certification.
+The current code does not hard-code Kisii University admission formats or institutional SIS endpoints. Institution-specific admission rules, academic calendars, course structures, identity providers and integration contracts must be configured from authorized institutional specifications.
 
-Do not represent these capabilities as implemented until their code, tests, integrations, and operational controls have been completed and verified.
+## Non-negotiable safety boundary
+
+A face match, risk category, attendance anomaly or incident report must never independently establish misconduct, determine guilt, or trigger a disciplinary sanction.
