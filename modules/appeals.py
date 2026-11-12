@@ -138,8 +138,13 @@ def prepare():
 
 
 
-@appeals_bp.post("/senate-verdicts/<int:incident_id>")
-def record_senate_verdict(incident_id):
+@appeals_bp.post("/senate-verdicts")
+def record_senate_verdict():
+    try:
+        incident_id = int(request.form.get("incident_id", ""))
+    except (TypeError, ValueError):
+        flash("Enter a valid incident record ID.", "error")
+        return redirect(url_for("appeals.senate_review_queue"))
     if session.get("role") not in {"admin", "registrar"}:
         abort(403)
     from datetime import date
