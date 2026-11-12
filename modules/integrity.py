@@ -116,9 +116,13 @@ def case_detail(incident_id):
         JOIN users u ON u.id=r.actor_user_id
         WHERE r.incident_id=? ORDER BY r.created_at DESC
     """, (incident_id,)).fetchall()
+    student_response = connection.execute("""
+        SELECT response_text, submitted_at FROM incident_case_responses WHERE incident_id=?
+    """, (incident_id,)).fetchone()
     connection.close()
     return render_template("incident_case.html", incident=incident, evidence=evidence,
-                           events=events, statuses=sorted(CASE_STATUSES), is_admin=session.get("role")=="admin")
+                           events=events, student_response=student_response,
+                           statuses=sorted(CASE_STATUSES), is_admin=session.get("role")=="admin")
 
 
 @integrity_bp.post("/incidents/<int:incident_id>/status")
