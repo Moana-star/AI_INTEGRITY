@@ -63,8 +63,12 @@
 - Acceptance: sandbox tests cover true/false/inconclusive outcomes, liveness failure, timeout, provider outage, consent withdrawal, manual fallback, data deletion and audit logging. No biometric result alone can deny exam access or determine misconduct.
 
 ### 8. Incident investigation and evidence
-- Complete independent reviewer assignment, conflicts-of-interest controls, evidence chain of custody, malware scanning, private object storage and retention/legal hold.
-- Add student response deadlines, acknowledgement, reviewer decision, appeal and independent appeal outcome.
+- Added a separate student appeal record and staff appeal queue.
+- Student appeals are accepted only for a final recorded case outcome and only for the authenticated student's own incident.
+- The original reporter and last recorded case reviewer are prevented from deciding the appeal.
+- Appeal events are append-only; independent outcomes are stored separately and do not silently rewrite the original incident record.
+- Remaining: formal appeal time limits and grounds from Kisii University policy, reviewer assignment workflow, appeal evidence submissions, acknowledgement/notifications, and full due-process browser tests.
+- Evidence chain-of-custody hardening, malware scanning, private object storage and retention/legal hold remain outstanding.
 - Acceptance: reporters cannot review their own cases; evidence access is authorized and audited; all status transitions have actor, timestamp and reason.
 
 ### 9. Portals and role separation
@@ -108,6 +112,7 @@ The parent branch's 19 unit tests and CI success are inherited evidence only. Th
 The institutional completion branch now includes:
 - `modules/access_control.py` and `modules/access_control.py` migration helpers for staff roles.
 - `modules/eligibility.py` with independently approved, versioned policy evaluation.
+- `modules/appeals.py` with student-initiated appeals and independent review safeguards.
 - Append-only academic history in the institutional registry.
 - Administrator staff provisioning, updated staff login and role-specific navigation.
 - New tests for role migration, eligibility decisions and append-only history.
