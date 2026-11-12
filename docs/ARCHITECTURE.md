@@ -25,7 +25,8 @@ flowchart TD
 
 | Component | Responsibility |
 |---|---|
-| `app.py` | Flask setup, routes, session handling, role checks, and request-level application logic |
+| `app.py` | Flask setup, legacy routes, session handling, role checks, and blueprint registration |
+| `modules/institutional_registry.py` | Administrator-only student registry, profile persistence, CSV onboarding, and selected audit events |
 | `database/database.py` | SQLite table creation and synthetic demonstration-data seeding |
 | `database/exam_integrity.db` | Local runtime database generated during setup; excluded from Git |
 | `templates/` | Server-rendered HTML/Jinja pages |
