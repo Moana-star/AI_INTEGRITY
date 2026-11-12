@@ -21,7 +21,7 @@ Run the current automated unit tests from the repository root:
 python -m unittest discover -v
 ```
 
-The initial registry tests cover additive schema creation, preservation of existing student records, field normalization, academic-status validation, and linked profile persistence. A GitHub Actions workflow runs this command for pushes to the feature branch and pull requests targeting main. The tests do not constitute full application, security, import-file, or end-to-end coverage.
+The automated suite covers additive registry and operations schemas, preservation of existing student records, student field normalization, academic-status validation, linked profile persistence, candidate/attendance uniqueness constraints, and incident/student-response schema constraints. GitHub Actions also compiles the application modules before running the tests. This remains a small unit-test foundation, not full application, security, upload, concurrency, or end-to-end coverage.
 
 ## Manual test cases
 
@@ -49,6 +49,18 @@ The initial registry tests cover additive schema creation, preservation of exist
 | T20 | CSV import | Include a duplicate or invalid row | That row is skipped without leaving a partial student record | Not run |
 | T21 | Privacy boundary | Inspect registry forms and database schema | No face image, face embedding, or biometric template is captured or stored | Not run |
 | T22 | Audit | Create, edit, and import registry records | Corresponding registry audit events are recorded | Not run |
+| T23 | Academic operations | Create a unit and enrol an active student | Enrolment is saved for the selected academic year and semester | Not run |
+| T24 | Examination sessions | Create a session linked to a unit | Eligible active enrolments populate the candidate list | Not run |
+| T25 | Venue scheduling | Attempt to overlap two sessions in one venue | Conflicting venue booking is rejected | Not run |
+| T26 | Invigilator assignment | Assign an invigilator to overlapping sessions | Overlapping assignment is rejected | Not run |
+| T27 | Attendance | Check a candidate in and out | Timestamps and audit events are recorded; duplicate events are rejected | Not run |
+| T28 | Authorization | Open an unassigned session as an invigilator | Access is denied | Not run |
+| T29 | Student portal | Provision an account and sign in with temporary password | Student must change password before portal access | Not run |
+| T30 | Student privacy | Open the student portal | Only that student's own profile, enrolments, sessions and incidents are shown | Not run |
+| T31 | Student response | Request a response and submit it from the student portal | One immutable response is recorded and visible to authorized reviewer | Not run |
+| T32 | Evidence | Upload an invalid type or oversized file | Upload is rejected | Not run |
+| T33 | Evidence | Upload valid PDF/JPEG/PNG and download as administrator | File checksum is stored and download access is audited | Not run |
+| T34 | Biometric boundary | Inspect attendance UI and provider configuration | No facial matching is claimed or enabled | Not run |
 
 ## Recording results
 
