@@ -37,6 +37,8 @@
 - Remaining: add the full official Kisii University policy rule set, effective-date edge-case tests, decision review/override workflow and browser acceptance.
 - Treat fee clearance or other sensitive administrative criteria only when the institution supplies and approves the policy/data source.
 - Record rule version, evidence source, result and review reason.
+- New session candidates now begin as pending. Attendance is blocked until an effective approved policy has been evaluated and the decision has been applied to that scheduled session.
+- Candidate-list refresh resets scheduled candidates to pending so stale eligibility is not silently reused.
 - Acceptance: eligible, pending and ineligible states are explainable and reproducible; a rule change does not silently rewrite historical decisions.
 
 ### 4. Venue, seating and invigilator allocation
@@ -47,6 +49,7 @@
 ### 5. Attendance interface
 - Provide a responsive invigilator station with candidate search/scan, check-in, check-out, duplicate-event protection and offline-safe exception capture.
 - Do not equate an ID or face match with eligibility.
+- Attendance recording now requires an explicit eligible candidate status; pending or ineligible candidates cannot be checked in.
 - Acceptance: only assigned staff can record attendance for their session; duplicate and out-of-session events are rejected; reconciliation flags missing events for human review.
 
 ### 6. Student ID verification
@@ -106,7 +109,7 @@ The following cannot be truthfully completed without institutional inputs:
 
 ## Current verification boundary
 
-The parent branch's 19 unit tests and CI success are inherited evidence only. This branch must run its own full test suite. A green unit-test workflow does not certify browser end-to-end behavior, security, accessibility, load, disaster recovery or institutional acceptance.
+The parent branch's 19 unit tests and CI success are inherited evidence only. The institutional completion branch has a successful CI run with 58 tests on implementation commit 709d21f17592041537e2b29c6f3ba605f680f761. A green unit-test workflow does not certify browser end-to-end behavior, security, accessibility, load, disaster recovery or institutional acceptance.
 
 
 ## Latest implementation increment
