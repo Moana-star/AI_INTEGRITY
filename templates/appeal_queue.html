@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Independent Appeals | EIMS{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Examination integrity · independent review</p><h1>Student appeals</h1><p class="page-subtitle">Appeals are assessed separately from the original incident case.</p></div></header>
+<section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Appeal</th><th>Student</th><th>Original incident</th><th>Submitted</th><th>Status</th><th>Independent decision</th></tr></thead><tbody>
+{% for a in appeals %}<tr><td>#{{ a.id }}<small class="cell-note">{{ a.appeal_text }}</small></td><td>{{ a.student_number }} · {{ a.first_name }} {{ a.last_name }}</td><td>{{ a.incident_type }} · {{ a.severity|title }}</td><td>{{ a.submitted_at }}</td><td>{{ a.appeal_status|replace('_',' ')|title }}</td><td>
+{% if a.appeal_status in ['submitted','under_review'] and session.get('user_id') not in [a.reported_by,a.original_reviewer] %}
+<form method="post" action="{{ url_for('appeals.decide_appeal', appeal_id=a.id) }}" class="stack-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Outcome<select name="outcome" required><option value="">Choose outcome</option><option value="decision_upheld">Original decision upheld</option><option value="decision_overturned">Original decision overturned</option><option value="referred">Refer for further institutional action</option></select></label>
+<label>Decision reasons<textarea name="decision_reason" minlength="30" maxlength="5000" required></textarea></label>
+<button class="btn btn-primary" type="submit">Record independent decision</button>
+</form>
+{% elif a.decision_reason %}<p>{{ a.decision_reason }}</p><small>Reviewed by account #{{ a.reviewed_by }}</small>
+{% else %}<small>Original reporter/reviewer cannot decide this appeal.</small>{% endif %}
+</td></tr>{% else %}<tr><td colspan="6">No appeals have been submitted.</td></tr>{% endfor %}
+</tbody></table></div></section>
+<p class="field-hint">The appeal decision is recorded separately. It does not silently edit or delete the original incident record. Apply the institution's approved appeal policy and preserve due-process safeguards.</p>
+{% endblock %}
