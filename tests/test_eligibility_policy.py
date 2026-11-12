@@ -168,6 +168,24 @@ class EligibilityPolicyTests(unittest.TestCase):
         self.assertTrue(any("academic status" in reason for reason in reasons))
 
 
+    def test_legacy_policy_missing_new_rules_fails_closed_to_pending(self):
+        from datetime import date
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO eligibility_policies
+                (policy_code,version,effective_from,rules_json,approval_status,created_by,approved_by)
+            VALUES('LEGACY',1,?,?, 'approved',1,2)
+        """, (date.today().isoformat(), json.dumps({
+            "require_active_student": True,
+            "require_registered_unit": True,
+        })))
+        connection.commit()
+        _, result, reasons, _ = eligibility.evaluate(
+            connection,1,1,"2026/2027","Semester 1",1)
+        connection.close()
+        self.assertEqual(result,"pending")
+        self.assertTrue(any("incomplete or invalid" in reason for reason in reasons))
+
     def test_missing_verified_evidence_remains_pending(self):
         self.add_policy()
         connection = self.connection()
