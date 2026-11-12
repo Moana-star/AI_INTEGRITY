@@ -11,6 +11,7 @@ from modules.integrity import integrity_bp
 from modules.student_portal import student_bp
 from modules.eligibility import eligibility_bp
 from modules.appeals import appeals_bp
+from modules.identity_check import identity_bp
 from modules.access_control import (STAFF_ROLES, effective_user_role, ensure_role_schema, legacy_role_for)
 
 app = Flask(__name__)
@@ -33,6 +34,7 @@ app.register_blueprint(integrity_bp)
 app.register_blueprint(student_bp)
 app.register_blueprint(eligibility_bp)
 app.register_blueprint(appeals_bp)
+app.register_blueprint(identity_bp)
 
 DATABASE = os.path.join(os.path.dirname(__file__), "database", "exam_integrity.db")
 
