@@ -296,12 +296,16 @@ def import_students():
         imported = 0
         rejected = 0
         for row in reader:
+            connection.execute("SAVEPOINT student_import_row")
             try:
                 normalized = {str(k).strip(): (v or "").strip() for k, v in row.items() if k}
                 values = _student_values(normalized)
                 _save_student(connection, values)
+                connection.execute("RELEASE SAVEPOINT student_import_row")
                 imported += 1
             except (ValueError, sqlite3.IntegrityError):
+                connection.execute("ROLLBACK TO SAVEPOINT student_import_row")
+                connection.execute("RELEASE SAVEPOINT student_import_row")
                 rejected += 1
         _record_audit(connection, "import", "student_registry", None,
                       f"CSV import processed: {imported} inserted; {rejected} skipped.")
