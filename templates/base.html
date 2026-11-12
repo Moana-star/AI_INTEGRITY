@@ -23,6 +23,7 @@
                 <a href="{{ url_for('admin_students') }}" {% if request.endpoint in ['admin_students','add_student','edit_student'] %}class="active" aria-current="page"{% endif %}>Students</a>
                 <a href="{{ url_for('registry.students') }}" {% if request.blueprint == 'registry' %}class="active" aria-current="page"{% endif %}>Institutional Registry</a>
                 <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Academic Operations</a>
+                <a href="{{ url_for('eligibility.workspace') }}" {% if request.blueprint == 'eligibility' %}class="active" aria-current="page"{% endif %}>Eligibility Policies</a>
                 <a href="{{ url_for('admin_examinations') }}" {% if request.endpoint in ['admin_examinations','add_examination','edit_examination'] %}class="active" aria-current="page"{% endif %}>Examinations</a>
                 <a href="{{ url_for('admin_invigilators') }}" {% if request.endpoint in ['admin_invigilators','add_invigilator','edit_invigilator'] %}class="active" aria-current="page"{% endif %}>Invigilators</a>
                 <a href="{{ url_for('admin_incidents') }}" {% if request.endpoint in ['admin_incidents','add_incident'] %}class="active" aria-current="page"{% endif %}>Incidents</a>
@@ -35,6 +36,7 @@
                 <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Academic Enrolments</a>
                 {% elif session.get('role') == 'examination_officer' %}
                 <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Examination Operations</a>
+                <a href="{{ url_for('eligibility.workspace') }}" {% if request.blueprint == 'eligibility' %}class="active" aria-current="page"{% endif %}>Eligibility Policies</a>
                 {% elif session.get('role') == 'student' %}
                 <a href="{{ url_for('student_portal.portal') }}">My student portal</a>
                 {% else %}
