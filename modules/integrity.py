@@ -106,7 +106,7 @@ SCHEMA_READY = False
 
 
 def staff():
-    return "user_id" in session and session.get("role") in {"admin", "invigilator"}
+    return "user_id" in session and session.get("role") in {"admin", "examination_officer", "invigilator"}
 
 
 @integrity_bp.before_request
@@ -167,12 +167,12 @@ def case_detail(incident_id):
     connection.close()
     return render_template("incident_case.html", incident=incident, evidence=evidence,
                            events=events, student_response=student_response,
-                           statuses=sorted(CASE_STATUSES), is_admin=session.get("role")=="admin")
+                           statuses=sorted(CASE_STATUSES), is_admin=session.get("role") in {"admin", "examination_officer"})
 
 
 @integrity_bp.post("/incidents/<int:incident_id>/status")
 def update_case_status(incident_id):
-    if session.get("role") != "admin":
+    if session.get("role") not in {"admin", "examination_officer"}:
         abort(403)
     status = (request.form.get("case_status") or "").strip()
     note = " ".join((request.form.get("review_note") or "").split())
@@ -291,7 +291,7 @@ def upload_evidence(incident_id):
 
 @integrity_bp.get("/evidence/<int:evidence_id>")
 def download_evidence(evidence_id):
-    if session.get("role") != "admin":
+    if session.get("role") not in {"admin", "examination_officer"}:
         abort(403)
     connection = db()
     record = connection.execute("SELECT * FROM incident_evidence WHERE id=?", (evidence_id,)).fetchone()
