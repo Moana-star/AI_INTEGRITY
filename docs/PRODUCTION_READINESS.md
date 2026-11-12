@@ -1,0 +1,89 @@
+# EIMS Production Readiness Gate
+
+**Status: Not production-ready. Do not process real student data or deploy for a live examination.**
+
+This checklist distinguishes implemented development workflows from the work required before a university can responsibly operate the system.
+
+## Implemented on the current feature branch
+
+- Admission-number-based student registry and CSV import.
+- Academic unit creation and student enrolment.
+- Examination sessions and candidate lists derived from enrolments.
+- Venue registration, capacity checks and invigilator assignment.
+- Seat labels and manual/student-card attendance check-in/check-out.
+- Student portal accounts provisioned by an administrator, with forced first-login password change.
+- Student access to their own profile, enrolments, sessions, attendance and incident notices.
+- Student response submission when an authorized reviewer requests a response.
+- Incident workflow statuses and review notes.
+- Private evidence file storage, file-size/type checks, SHA-256 checksums and administrator-only download audit.
+- Automated Python compilation and unit-test workflow.
+
+## Required before any real student data
+
+### Institutional and legal approval
+
+- [ ] Identify the data controller and processor roles and sign appropriate agreements.
+- [ ] Obtain written institutional authorization and data-owner approval.
+- [ ] Complete a DPIA and legal/privacy review.
+- [ ] Approve a data inventory, purpose, lawful basis, retention and deletion schedule.
+- [ ] Approve student notices, access/correction requests and complaint procedures.
+- [ ] Confirm institutional security and procurement requirements.
+
+### Security engineering
+
+- [ ] Replace SQLite with a supported PostgreSQL deployment and test migrations.
+- [ ] Implement CSRF protection for all state-changing forms.
+- [ ] Implement login rate limiting, account lockout policy and MFA for privileged roles.
+- [ ] Replace broad administrator/invigilator roles with least-privilege registrar, examination officer, invigilator, reviewer and system-administrator permissions.
+- [ ] Enforce password reset, recovery, session expiration and session revocation policies.
+- [ ] Configure persistent high-entropy secrets and HTTPS-only secure cookies.
+- [ ] Encrypt database backups and evidence storage at rest; manage keys separately.
+- [ ] Add malware scanning and content-disarm review for uploaded evidence.
+- [ ] Add retention enforcement, secure deletion, legal holds and evidence access reviews.
+- [ ] Perform dependency, SAST, DAST, penetration and authorization testing.
+- [ ] Add structured security logging, monitoring, alerting and incident response.
+
+### Data and integration
+
+- [ ] Obtain an approved student-information-system data dictionary and integration contract.
+- [ ] Validate import files against authoritative records and reconcile rejected rows.
+- [ ] Implement timetable and venue conflict detection.
+- [ ] Validate examination eligibility with the registrar's approved rules.
+- [ ] Implement attendance exception resolution, absent/disputed statuses and signed session close-out.
+- [ ] Add institution-approved staff and student identity lifecycle management.
+- [ ] Test concurrent use with realistic examination sizes and unreliable network conditions.
+
+### Biometric identity verification — separately gated
+
+- [ ] Written institutional approval and completed DPIA.
+- [ ] Approved provider, processor agreement and data-location/security assessment.
+- [ ] Documented lawful basis, necessity and proportionality.
+- [ ] Meaningful non-biometric alternative that does not disadvantage students.
+- [ ] Independent false-match/false-non-match and demographic performance testing.
+- [ ] Liveness/presentation-attack assessment and human exception review.
+- [ ] Defined template retention, revocation and deletion controls.
+- [ ] Security test and supervised pilot approval.
+
+**The current application does not perform face detection, face matching or liveness detection.** No biometric verification outcome should be inferred from the attendance method fields.
+
+### Operational assurance
+
+- [ ] Complete end-to-end tests for each role and workflow.
+- [ ] Complete accessibility and usability testing with representative users.
+- [ ] Configure production WSGI hosting, TLS, monitoring and managed secrets.
+- [ ] Perform backup restoration and disaster-recovery drills.
+- [ ] Train administrators, registrars, invigilators and reviewers.
+- [ ] Run a limited pilot with synthetic or explicitly authorized data.
+- [ ] Obtain formal go-live approval from the institution.
+
+## Current technical limitations
+
+- The application still uses SQLite and raw SQLite access throughout the legacy application.
+- The student/staff role model is not yet a complete institutional RBAC model.
+- CSRF protection and login rate limiting are not yet implemented.
+- Evidence files are private by path and access control, but encrypted storage, malware scanning and retention automation are not yet implemented.
+- The current test suite is a small automated foundation, not comprehensive coverage.
+- The biometric provider is not connected.
+- No university SIS integration or institutional deployment is configured.
+
+A successful unit-test workflow does not certify production security, legal compliance, or operational readiness.
