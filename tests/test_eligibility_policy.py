@@ -62,11 +62,25 @@ class EligibilityPolicyTests(unittest.TestCase):
         """, (date.today().isoformat(), json.dumps({
             "require_active_student": True,
             "require_registered_unit": True,
+            "require_fee_clearance": True,
+            "minimum_attendance_percentage": 80,
+            "minimum_cats_required": 2,
         })))
         connection.commit()
         policy_id = cursor.lastrowid
         connection.close()
         return policy_id
+
+    def add_evidence(self, fees=1, attended=8, total=10, cats_required=2, cats_sat=2):
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO eligibility_evidence
+                (student_id,unit_id,academic_year,semester,lectures_total,lectures_attended,
+                 cats_required,cats_sat,fees_cleared,evidence_reference,verified_by)
+            VALUES(1,1,'2026/2027','Semester 1',?,?,?,?,?,'REG-REF-001',1)
+        """, (total,attended,cats_required,cats_sat,fees))
+        connection.commit()
+        connection.close()
 
     def test_no_approved_policy_returns_pending_not_clearance(self):
         connection = self.connection()
@@ -95,6 +109,7 @@ class EligibilityPolicyTests(unittest.TestCase):
                 (student_id,unit_id,academic_year,semester,enrolment_status)
             VALUES(1,1,'2026/2027','Semester 1','registered')
         """)
+        self.add_evidence()
         _, result, reasons, policy = eligibility.evaluate(
             connection,1,1,"2026/2027","Semester 1",1)
         connection.close()
@@ -144,11 +159,69 @@ class EligibilityPolicyTests(unittest.TestCase):
                 (student_id,unit_id,academic_year,semester,enrolment_status)
             VALUES(1,1,'2026/2027','Semester 1','registered')
         """)
+        self.add_evidence()
         _, result, reasons, _ = eligibility.evaluate(
             connection,1,1,"2026/2027","Semester 1",1)
         connection.close()
         self.assertEqual(result,"ineligible")
         self.assertTrue(any("academic status" in reason for reason in reasons))
+
+
+    def test_missing_verified_evidence_remains_pending(self):
+        self.add_policy()
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO student_unit_enrolments
+                (student_id,unit_id,academic_year,semester,enrolment_status)
+            VALUES(1,1,'2026/2027','Semester 1','registered')
+        """)
+        _, result, reasons, _ = eligibility.evaluate(connection,1,1,"2026/2027","Semester 1",1)
+        connection.close()
+        self.assertEqual(result,"pending")
+        self.assertTrue(any("evidence has not been recorded" in reason for reason in reasons))
+
+    def test_insufficient_attendance_is_ineligible(self):
+        self.add_policy()
+        self.add_evidence(attended=7)
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO student_unit_enrolments
+                (student_id,unit_id,academic_year,semester,enrolment_status)
+            VALUES(1,1,'2026/2027','Semester 1','registered')
+        """)
+        _, result, reasons, _ = eligibility.evaluate(connection,1,1,"2026/2027","Semester 1",1)
+        connection.close()
+        self.assertEqual(result,"ineligible")
+        self.assertTrue(any("attendance is 70.0%" in reason for reason in reasons))
+
+    def test_unpaid_fees_are_ineligible(self):
+        self.add_policy()
+        self.add_evidence(fees=0)
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO student_unit_enrolments
+                (student_id,unit_id,academic_year,semester,enrolment_status)
+            VALUES(1,1,'2026/2027','Semester 1','registered')
+        """)
+        _, result, reasons, _ = eligibility.evaluate(connection,1,1,"2026/2027","Semester 1",1)
+        connection.close()
+        self.assertEqual(result,"ineligible")
+        self.assertTrue(any("outstanding fees" in reason for reason in reasons))
+
+    def test_missing_cat_attempts_are_ineligible(self):
+        self.add_policy()
+        self.add_evidence(cats_sat=1)
+        connection = self.connection()
+        connection.execute("""
+            INSERT INTO student_unit_enrolments
+                (student_id,unit_id,academic_year,semester,enrolment_status)
+            VALUES(1,1,'2026/2027','Semester 1','registered')
+        """)
+        _, result, reasons, _ = eligibility.evaluate(connection,1,1,"2026/2027","Semester 1",1)
+        connection.close()
+        self.assertEqual(result,"ineligible")
+        self.assertTrue(any("Only 1 of the required CATs" in reason for reason in reasons))
+
 
 
 if __name__ == "__main__":
