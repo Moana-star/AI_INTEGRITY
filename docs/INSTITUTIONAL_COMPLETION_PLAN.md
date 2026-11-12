@@ -16,8 +16,10 @@
 ## Workstreams and acceptance gates
 
 ### 1. Student information and academic history
-- Complete student profile, programme, faculty, department, cohort, academic status and institutional contact fields.
-- Add immutable, dated academic-history events for programme changes, deferments, suspensions, progression and graduation.
+- Student profile and registry fields are available in the existing institutional registry increment.
+- Added append-only academic-history events for programme changes, deferments, suspensions, progression, status changes and graduation, with effective dates, reasons and recording user.
+- SQLite triggers reject updates and deletes to recorded history; corrections must be recorded as a new event.
+- Remaining: history workflow browser tests, richer programme/cohort structure, and policy-approved validation of each event type.
 - Add controlled unit registration, add/drop windows, prerequisite checks, duplicate prevention and completion history.
 - Restrict updates by role and retain before/after audit metadata without copying sensitive values into logs.
 - Acceptance: a registrar can create and amend a synthetic student record; academic history is chronological; duplicate unit registration and invalid status transitions are rejected; a student can see only their own permitted record.
@@ -29,8 +31,10 @@
 - Acceptance: conflicting reservations cannot be committed, and rescheduling/cancellation creates an attributable audit event.
 
 ### 3. Eligibility verification
-- Implement institution-configurable eligibility rules with effective dates and versioned policy.
-- Evaluate active student status, unit registration and approved academic prerequisites.
+- Added a versioned eligibility policy engine and officer workspace.
+- Policy drafts require an official policy/source reference; approval is restricted to a different administrator from the creator.
+- The current engine checks active academic status and registered unit enrolment. Without an effective approved policy, it records a pending decision rather than clearing or disqualifying the candidate.
+- Remaining: add the full official Kisii University policy rule set, effective-date edge-case tests, decision review/override workflow and browser acceptance.
 - Treat fee clearance or other sensitive administrative criteria only when the institution supplies and approves the policy/data source.
 - Record rule version, evidence source, result and review reason.
 - Acceptance: eligible, pending and ineligible states are explainable and reproducible; a rule change does not silently rewrite historical decisions.
@@ -97,3 +101,15 @@ The following cannot be truthfully completed without institutional inputs:
 ## Current verification boundary
 
 The parent branch's 19 unit tests and CI success are inherited evidence only. This branch must run its own full test suite. A green unit-test workflow does not certify browser end-to-end behavior, security, accessibility, load, disaster recovery or institutional acceptance.
+
+
+## Latest implementation increment
+
+The institutional completion branch now includes:
+- `modules/access_control.py` and `modules/access_control.py` migration helpers for staff roles.
+- `modules/eligibility.py` with independently approved, versioned policy evaluation.
+- Append-only academic history in the institutional registry.
+- Administrator staff provisioning, updated staff login and role-specific navigation.
+- New tests for role migration, eligibility decisions and append-only history.
+
+These are development increments. They do not establish institutional policy approval, production authorization or full end-to-end readiness.
