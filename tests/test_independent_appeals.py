@@ -55,9 +55,9 @@ class IndependentAppealTests(unittest.TestCase):
         appeals.ensure_schema()
         connection=sqlite3.connect(self.path)
         connection.execute("""
-            INSERT INTO incident_case_workflow
-                (incident_id,case_status,reported_by,updated_by)
-            VALUES(1,'resolved',1,2)
+            UPDATE incident_case_workflow
+            SET case_status='resolved',reported_by=1,updated_by=2
+            WHERE incident_id=1
         """)
         connection.commit()
         connection.close()
