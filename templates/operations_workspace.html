@@ -42,7 +42,7 @@
   </section>
   <section class="panel form-panel">
     <h2>Configure venue seat layout</h2>
-    <form method="post" action="#" id="venue-layout-form" class="stack-form">
+    <form method="post" action="{{ url_for('operations.configure_venue_layout') }}" class="stack-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Venue<select name="venue_id" required>{% for v in venues %}<option value="{{ v.id }}">{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} capacity)</option>{% endfor %}</select></label>
       <label>Rows (A–Z)<input name="rows" type="number" min="1" max="26" required></label>
@@ -50,9 +50,7 @@
       <label>Accessible seat labels (comma-separated)<input name="accessible_seats" placeholder="A-01,A-02"></label>
       <button class="button button-primary" type="submit">Save seat layout</button>
     </form>
-    <script>
-    (function(){const form=document.getElementById('venue-layout-form');if(form){form.addEventListener('submit',function(e){e.preventDefault();const id=form.elements.venue_id.value;form.action='/operations/venues/'+encodeURIComponent(id)+'/layout';form.elements.venue_id.disabled=true;form.submit();});}})();
-    </script>
+
   </section>
   <section class="panel form-panel">
     <h2>Create examination session</h2>
