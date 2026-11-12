@@ -12,6 +12,7 @@ import re
 import sqlite3
 from datetime import date, datetime
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from modules.institutional_registry import ensure_schema as ensure_registry_schema
 
 operations_bp = Blueprint("operations", __name__, url_prefix="/operations")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -141,6 +142,7 @@ def prepare():
     if not _require_staff():
         return redirect(url_for("login"))
     if not SCHEMA_READY:
+        ensure_registry_schema()
         ensure_schema()
         SCHEMA_READY = True
 
@@ -381,6 +383,33 @@ def assign_invigilator(session_id):
     return redirect(url_for("operations.workspace"))
 
 
+@operations_bp.post("/sessions/<int:session_id>/status")
+def update_session_status(session_id):
+    if not _require_admin():
+        return redirect(url_for("login"))
+    new_status = (request.form.get("status") or "").strip()
+    if new_status not in {"active", "completed", "cancelled"}:
+        flash("Choose a valid session status.", "error")
+        return redirect(url_for("operations.workspace"))
+    connection = db()
+    current = connection.execute("SELECT status FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
+    if not current:
+        connection.close()
+        flash("Examination session not found.", "error")
+        return redirect(url_for("operations.workspace"))
+    if current["status"] in {"completed", "cancelled"}:
+        connection.close()
+        flash("A completed or cancelled session cannot be reopened or changed.", "error")
+        return redirect(url_for("operations.workspace"))
+    connection.execute("UPDATE examination_sessions SET status=? WHERE id=?", (new_status, session_id))
+    _audit(connection, "status_change", "examination_session", session_id,
+           f"Session status changed from {current['status']} to {new_status}.")
+    connection.commit()
+    connection.close()
+    flash(f"Session status updated to {new_status}.", "success")
+    return redirect(url_for("operations.workspace"))
+
+
 @operations_bp.get("/sessions/<int:session_id>/attendance")
 def attendance(session_id):
     connection = db()
@@ -438,6 +467,10 @@ def record_attendance(session_id, student_id):
         SELECT 1 FROM session_candidates WHERE session_id=? AND student_id=?
           AND eligibility_status='eligible'
     """, (session_id, student_id)).fetchone()
+    if session_row["status"] not in {"scheduled", "active"}:
+        connection.close()
+        flash("Attendance is closed for completed or cancelled sessions.", "error")
+        return redirect(url_for("operations.attendance", session_id=session_id))
     if not candidate:
         connection.close()
         flash("Attendance cannot be recorded: this student is not an eligible candidate for the session.", "error")
