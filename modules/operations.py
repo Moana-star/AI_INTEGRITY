@@ -489,7 +489,7 @@ def attendance(session_id):
         WHERE c.session_id=? ORDER BY s.student_number
     """, (session_id,)).fetchall()
     connection.close()
-    return render_template("session_attendance.html", exam_session=session_row, candidates=candidates)
+    return render_template("session_attendance.html", exam_session=session_row, candidates=candidates, is_admin=_require_admin())
 
 
 @operations_bp.post("/sessions/<int:session_id>/attendance/<int:student_id>")
