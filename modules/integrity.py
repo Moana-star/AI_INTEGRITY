@@ -122,6 +122,38 @@ def prepare():
         SCHEMA_READY = True
 
 
+@integrity_bp.get("/incidents")
+def case_list():
+    connection = db()
+    query = """
+        SELECT i.id, i.incident_type, i.severity, i.reported_at,
+               s.student_number, s.first_name, s.last_name, e.course_code,
+               COALESCE(w.case_status, 'reported') AS case_status
+        FROM incidents i
+        LEFT JOIN students s ON s.id=i.student_id
+        LEFT JOIN examinations e ON e.id=i.examination_id
+        LEFT JOIN incident_case_workflow w ON w.incident_id=i.id
+    """
+    params = ()
+    if session.get("role") == "invigilator":
+        query += """
+            WHERE EXISTS (
+                SELECT 1 FROM examinations ex JOIN invigilators v ON v.id=ex.invigilator_id
+                WHERE ex.id=i.examination_id AND v.user_id=?
+            ) OR EXISTS (
+                SELECT 1 FROM incident_session_links l
+                JOIN session_invigilators si ON si.session_id=l.session_id
+                JOIN invigilators v ON v.id=si.invigilator_id
+                WHERE l.incident_id=i.id AND v.user_id=?
+            )
+        """
+        params = (session["user_id"], session["user_id"])
+    query += " ORDER BY i.reported_at DESC"
+    incidents = connection.execute(query, params).fetchall()
+    connection.close()
+    return render_template("incident_cases.html", incidents=incidents)
+
+
 @integrity_bp.get("/incidents/<int:incident_id>")
 def case_detail(incident_id):
     connection = db()
