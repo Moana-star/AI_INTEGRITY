@@ -1,6 +1,6 @@
 # Examination Integrity Management System (EIMS)
 
-A Flask and SQLite web application for managing examination records, invigilator workflows, incident reports, and transparent rule-based incident summaries.
+A developing Flask-based university examination operations platform with student registry, academic enrolment, examination sessions, attendance, student self-service, and evidence-controlled incident review workflows.
 
 **Project type:** Academic / demonstration project  
 **Stack:** Python · Flask · SQLite · HTML · CSS · JavaScript  
@@ -19,13 +19,13 @@ A Flask and SQLite web application for managing examination records, invigilator
 - [Incident review categories](#incident-review-categories)
 - [Security and limitations](#security-and-limitations)
 - [Testing](#testing)
-- [Institutional development](#institutional-development)
+- [Institutional development](#institutional-development)\n- [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
 ## Overview
 
-The Examination Integrity Management System (EIMS) demonstrates how a web application can support examination administration. It provides separate administrator and invigilator workflows, stores structured records in SQLite, and gives administrators a consolidated view of examinations and reported incidents.
+EIMS is being expanded into a university examination operations platform. The current feature branch adds administrator-managed student records, academic unit enrolment, examination sessions, eligible candidate lists, venue capacity checks, invigilator assignments, manual/student-card attendance, a student portal, and evidence-controlled incident review. These workflows are an implementation increment and still require local end-to-end verification and institutional security review.
 
 The analysis feature applies explicit rules to recorded incident data. Despite the interface's AI-analysis wording, **the current implementation does not use artificial intelligence, machine learning, or a trained predictive model**.
 
@@ -35,22 +35,22 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 - **Invigilator registration:** self-registration is restricted to the invigilator role.
 - **Student management:** maintain student records used by examination and incident workflows.
 - **Institutional student registry (initial increment):** maintain admission-number-based profiles, academic placement, institutional contact fields, and academic status; import authorized UTF-8 CSV records.
-- **Registry foundations:** additive profile, academic-unit, enrolment, attendance, and audit-event schema foundations. Not all corresponding workflows are implemented yet.
+- **Academic operations:** create academic units, enrol active students, create examination sessions, derive candidate lists from enrolments, register venues, check venue capacity, and assign invigilators.\n- **Attendance:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, and audit events. Facial recognition is not enabled.\n- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, and incident-response submission when requested.\n- **Incident investigations:** case workflow statuses, reviewer notes, restricted evidence uploads, SHA-256 checksums, and audited evidence downloads.
 - **Examination management:** manage examination details, schedules, venues, statuses, and invigilator assignments.
 - **Invigilator management:** maintain invigilator details and status.
 - **Incident reporting:** record incidents against students and examinations, including descriptions, severity, and status.
-- **Incident review:** administrators can review incidents and mark them as resolved.
+- **Incident review:** administrators can manage case workflow statuses, record review notes, and view student responses. Evidence files are stored outside the public static directory.
 - **Explainable incident analysis:** categorize recorded incident patterns using explicit rules and show a reason for each category.
 - **Dashboards and reports:** present examination, incident, and record summaries.
 - **Local persistence:** store application data in SQLite.
 
 ## Architecture
 
-The application uses a simple Flask server-rendered architecture:
+The application uses a modular Flask server-rendered architecture:
 
 ```mermaid
 flowchart TD
-    U[Administrator or Invigilator] --> B[Browser]
+    U[Administrator, Invigilator or Student] --> B[Browser]
     B <--> F[Flask Application: app.py]
     F --> A[Session and Role Checks]
     F --> R[Application Routes]
@@ -91,7 +91,7 @@ AI_INTEGRITY/
 └── .gitignore
 ```
 
-The SQLite database is generated locally during setup and is intentionally excluded from Git.
+The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
 
 ## Technology stack
 
