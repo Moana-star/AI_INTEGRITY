@@ -46,6 +46,20 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         integrity.SCHEMA_READY = False
         os.unlink(self.path)
 
+    def test_venue_layout_builds_sequential_and_accessible_seats(self):
+        seats = operations.build_venue_seats(2,3,{"A-01","B-03"})
+        self.assertEqual(len(seats),6)
+        self.assertEqual(seats[0],("A-01","A",1,1))
+        self.assertEqual(seats[-1],("B-03","B",3,1))
+
+    def test_venue_layout_rejects_unknown_accessible_seat(self):
+        with self.assertRaises(ValueError):
+            operations.build_venue_seats(2,3,{"C-01"})
+
+    def test_venue_layout_rejects_more_than_26_rows(self):
+        with self.assertRaises(ValueError):
+            operations.build_venue_seats(27,3,set())
+
     def test_session_activation_requires_venue_capacity_and_two_invigilators(self):
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
