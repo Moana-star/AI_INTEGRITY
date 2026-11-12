@@ -67,14 +67,11 @@ class InstitutionalRoleMigrationTests(unittest.TestCase):
 
     def test_unknown_legacy_role_fails_closed_after_migration(self):
         ensure_role_schema(self.connection)
-        self.connection.execute(
-            "UPDATE users SET institutional_role='unexpected' WHERE username='root'"
-        )
-        self.connection.commit()
-        row = self.connection.execute(
-            "SELECT * FROM users WHERE username='root'"
-        ).fetchone()
-        self.assertIsNone(effective_user_role(row))
+        # Database CHECK constraints reject invalid persisted roles; the
+        # resolver also fails closed if handed corrupt/external row data.
+        self.assertIsNone(effective_user_role({
+            "institutional_role": "unexpected", "role": "admin"
+        }))
 
 
 if __name__ == "__main__":
