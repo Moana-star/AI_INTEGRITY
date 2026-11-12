@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask_wtf.csrf import CSRFProtect
+from modules.security import limiter
 import sqlite3
 import os
 from datetime import datetime
@@ -14,6 +15,10 @@ if os.environ.get("FLASK_ENV") == "production" and not os.environ.get("FLASK_SEC
     raise RuntimeError("FLASK_SECRET_KEY must be configured for production.")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 CSRFProtect(app)
+rate_limit_storage = os.environ.get("RATELIMIT_STORAGE_URI")
+if os.environ.get("FLASK_ENV") == "production" and not rate_limit_storage:
+    raise RuntimeError("RATELIMIT_STORAGE_URI must point to shared Redis-compatible storage in production.")
+limiter.init_app(app, storage_uri=rate_limit_storage or "memory://")
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "0") == "1",
                   MAX_CONTENT_LENGTH=6 * 1024 * 1024)
@@ -100,6 +105,7 @@ def home():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def login():
     if request.method == "GET":
         return render_template("login.html")
