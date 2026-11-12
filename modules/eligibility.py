@@ -11,6 +11,8 @@ import os
 import sqlite3
 from datetime import date
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
+from modules.institutional_registry import ensure_schema as ensure_registry_schema
+from modules.operations import ensure_schema as ensure_operations_schema
 
 eligibility_bp = Blueprint("eligibility", __name__, url_prefix="/eligibility")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -134,6 +136,8 @@ def evaluate(connection, student_id, unit_id, academic_year, semester, actor_id)
 def authorize():
     if "user_id" not in session or session.get("role") not in {"admin", "examination_officer"}:
         abort(403)
+    ensure_registry_schema()
+    ensure_operations_schema()
     ensure_schema()
 
 
@@ -174,8 +178,8 @@ def create_policy():
         "require_active_student": request.form.get("require_active_student") == "on",
         "require_registered_unit": request.form.get("require_registered_unit") == "on",
     }
-    if not code or len(code) > 60 or version < 1 or len(reason) < 10:
-        flash("Provide a policy code, positive version and an official policy/source reference.", "error")
+    if not code or len(code) > 60 or version < 1 or len(reason) < 10 or not all(rules.values()):
+        flash("Provide a policy code, positive version, official policy/source reference, and both active-student and registered-unit checks.", "error")
         return redirect(url_for("eligibility.workspace"))
     connection = db()
     try:
