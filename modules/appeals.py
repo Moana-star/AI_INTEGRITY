@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from datetime import date, timedelta
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from modules.integrity import ensure_schema as ensure_integrity_schema
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
@@ -26,7 +27,7 @@ def within_senate_review_period(communicated_at, submitted_at):
         submitted = date.fromisoformat(submitted_at)
     except (TypeError, ValueError):
         return False
-    return communicated <= submitted <= communicated + __import__("datetime").timedelta(days=21)
+    return communicated <= submitted <= communicated + timedelta(days=21)
 
 
 def db():
