@@ -243,6 +243,8 @@ def evaluate_annual_progression(total_courses, failed_courses, supplementary_fee
                                supplementary_failed_courses=0):
     """Calculate a review pathway from the published 2019 handbook; never changes status."""
     values = (total_courses,failed_courses,supplementary_failed_courses)
+    if type(supplementary_fee_paid) is not bool:
+        raise ValueError("Supplementary fee status must be an explicitly verified boolean.")
     if any(type(value) is not int for value in values):
         raise ValueError("Course counts must be whole numbers.")
     if total_courses < 1 or not 0 <= failed_courses <= total_courses:
