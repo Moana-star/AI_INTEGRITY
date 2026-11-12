@@ -50,13 +50,15 @@
 - Acceptance: only assigned staff can record attendance for their session; duplicate and out-of-session events are rejected; reconciliation flags missing events for human review.
 
 ### 6. Student ID verification
-- Verify an admission number or signed/QR student credential against the institution-authorized registry.
-- Protect against replay where a signed, expiring token is used.
-- Provide manual review and accessible fallback.
-- Acceptance: unknown, inactive, expired and mismatched identities are distinguished and audited.
+- Added a session-scoped candidate identity review page. It shows only candidates attached to the selected examination session.
+- Invigilators can open the page only for sessions assigned to their account; admin and examination officers have authorized staff access.
+- Added an optional browser camera preview that requests permission only after a user click. It does not capture, upload, compare, template or store face images.
+- The page explicitly distinguishes visual preview from identity proof, eligibility and attendance. Manual identity procedures remain the only active verification route.
+- Remaining: institution-approved student-card/QR credential validation, signed-token anti-replay, and audited verification outcomes after university policy and credential specifications are supplied.
 
 ### 7. Biometric verification
 - A provider-neutral boundary is introduced in `modules/biometric_verification.py`. It requires deployment enablement, institutional approval, a consent/alternative-process record and an explicitly supplied provider adapter.
+- A preview-only camera interface exists in `modules/identity_check.py` and `static/js/camera_preview.js`; it performs no biometric capture or matching.
 - The boundary supports one-to-one verification only; it requires both match and liveness success and fails closed on provider errors or inconclusive responses.
 - It does not store captures or create face templates. No provider is currently configured and no live camera route is enabled.
 - Before a real integration: select a university-approved provider; obtain its API documentation, data residency/security details, DPA, liveness/matching semantics, retention policy and test credentials; complete DPIA and institutional approval.
@@ -118,3 +120,5 @@ The institutional completion branch now includes:
 - New tests for role migration, eligibility decisions and append-only history.
 
 These are development increments. They do not establish institutional policy approval, production authorization or full end-to-end readiness.
+
+- Session-scoped camera preview interface added; live face matching remains disabled because Kisii University has not selected an approved provider.
