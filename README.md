@@ -21,8 +21,6 @@ A developing Flask-based university examination operations platform with student
 - [Testing](#testing)
 - [Institutional development](#institutional-development)
 - [Production readiness](docs/PRODUCTION_READINESS.md)
-- [Production readiness](docs/PRODUCTION_READINESS.md)
-- [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
