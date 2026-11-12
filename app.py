@@ -180,43 +180,23 @@ def register():
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    if request.method == "GET":
-        return render_template("forgot_password.html")
-
-    username = (request.form.get("username") or "").strip().lower()
-    connection = get_db_connection()
-    user = connection.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone() if username else None
-    connection.close()
-
-    # This local presentation flow has no email or identity verification service.
-    # Always show the same next screen so account names are not disclosed here.
-    session.pop("password_reset_user_id", None)
-    if user is not None:
-        session["password_reset_user_id"] = user["id"]
-    return render_template("reset_password.html", continuation_message="If the account is registered, you may continue with this local demonstration reset.")
+    # Password recovery is intentionally unavailable until a verified institutional
+    # identity/recovery channel is integrated. Never let username knowledge authorize
+    # a password change.
+    return render_template(
+        "forgot_password.html",
+        error="Self-service password recovery is not enabled. Contact your institution's authorized system administrator through its verified support process."
+    )
 
 
 @app.route("/reset-password", methods=["GET", "POST"])
 def reset_password():
-    user_id = session.get("password_reset_user_id")
-    if request.method == "GET":
-        return render_template("reset_password.html", continuation_message="Continue from the Forgot Password page to use this local demonstration flow.")
-
-    password = request.form.get("password") or ""
-    confirm_password = request.form.get("confirm_password") or ""
-    if len(password) < 8:
-        return render_template("reset_password.html", error="Password must be at least 8 characters.")
-    if password != confirm_password:
-        return render_template("reset_password.html", error="Passwords do not match.")
-    if not user_id:
-        return render_template("reset_password.html", error="The reset could not be completed. Start again from Forgot Password.")
-
-    connection = get_db_connection()
-    cursor = connection.execute("UPDATE users SET password = ? WHERE id = ?", (generate_password_hash(password), user_id))
-    connection.commit()
-    connection.close()
-    session.clear()
-    return render_template("reset_password.html", success="Password updated. Return to sign in with your new password.")
+    # Reject legacy/local reset attempts. The former username-only flow allowed
+    # account takeover because no email, MFA, or identity verification was performed.
+    return render_template(
+        "reset_password.html",
+        error="Password reset cannot be completed here. Use your institution's verified account-recovery process."
+    )
 
 
 @app.route("/logout", methods=["POST"])
