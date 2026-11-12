@@ -116,6 +116,45 @@ def ensure_schema():
             FOREIGN KEY(student_id) REFERENCES students(id),
             FOREIGN KEY(verified_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS venue_seats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venue_id INTEGER NOT NULL,
+            seat_label TEXT NOT NULL,
+            row_label TEXT NOT NULL,
+            seat_number INTEGER NOT NULL,
+            accessible INTEGER NOT NULL DEFAULT 0 CHECK(accessible IN (0,1)),
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            UNIQUE(venue_id,seat_label),
+            FOREIGN KEY(venue_id) REFERENCES venues(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS student_exam_accommodations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            academic_year TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            requires_accessible_seat INTEGER NOT NULL DEFAULT 0 CHECK(requires_accessible_seat IN (0,1)),
+            extra_time_minutes INTEGER NOT NULL DEFAULT 0 CHECK(extra_time_minutes BETWEEN 0 AND 240),
+            source_reference TEXT NOT NULL,
+            approved_by INTEGER NOT NULL,
+            approved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(student_id,academic_year,semester),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(approved_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS session_seat_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            venue_seat_id INTEGER NOT NULL,
+            assigned_by INTEGER NOT NULL,
+            assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(session_id,student_id),
+            UNIQUE(session_id,venue_seat_id),
+            FOREIGN KEY(session_id) REFERENCES examination_sessions(id) ON DELETE CASCADE,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(venue_seat_id) REFERENCES venue_seats(id),
+            FOREIGN KEY(assigned_by) REFERENCES users(id)
+        );
         CREATE INDEX IF NOT EXISTS idx_candidates_session ON session_candidates(session_id);
         CREATE INDEX IF NOT EXISTS idx_attendance_session ON session_attendance(session_id);
         CREATE INDEX IF NOT EXISTS idx_exam_sessions_date ON examination_sessions(session_date);
@@ -131,6 +170,24 @@ def ensure_schema():
     """)
     connection.commit()
     connection.close()
+
+
+def build_venue_seats(row_count, seats_per_row, accessible_labels=()):
+    if type(row_count) is not int or not 1 <= row_count <= 26:
+        raise ValueError("Rows must be between 1 and 26.")
+    if type(seats_per_row) is not int or not 1 <= seats_per_row <= 100:
+        raise ValueError("Seats per row must be between 1 and 100.")
+    valid = set()
+    seats = []
+    for row_index in range(row_count):
+        row_label = chr(ord("A") + row_index)
+        for number in range(1, seats_per_row + 1):
+            label = f"{row_label}-{number:02d}"
+            valid.add(label)
+            seats.append((label,row_label,number,int(label in accessible_labels)))
+    if not set(accessible_labels).issubset(valid):
+        raise ValueError("An accessible seat label does not exist in the generated layout.")
+    return seats
 
 
 def session_activation_blockers(connection, session_id):
@@ -326,6 +383,143 @@ def create_venue():
         flash("That venue code already exists.", "error")
     finally:
         connection.close()
+    return redirect(url_for("operations.workspace"))
+
+
+@operations_bp.post("/venues/<int:venue_id>/layout")
+def configure_venue_layout(venue_id):
+    if not _require_admin():
+        abort(403)
+    try:
+        rows = int(request.form.get("rows", ""))
+        seats_per_row = int(request.form.get("seats_per_row", ""))
+    except (TypeError, ValueError):
+        flash("Enter valid row and seat counts.", "error")
+        return redirect(url_for("operations.workspace"))
+    accessible = {item.strip().upper() for item in (request.form.get("accessible_seats") or "").split(",") if item.strip()}
+    try:
+        seats = build_venue_seats(rows,seats_per_row,accessible)
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(url_for("operations.workspace"))
+    connection = db()
+    venue = connection.execute("SELECT capacity FROM venues WHERE id=? AND active=1",(venue_id,)).fetchone()
+    used = connection.execute("""
+        SELECT 1 FROM session_seat_assignments a
+        JOIN examination_sessions s ON s.id=a.session_id
+        WHERE s.venue_id=? LIMIT 1
+    """,(venue_id,)).fetchone()
+    if not venue or len(seats)>venue["capacity"] or used:
+        connection.close()
+        flash("The venue must be active, the layout cannot exceed its capacity, and an allocated layout cannot be replaced.", "error")
+        return redirect(url_for("operations.workspace"))
+    connection.execute("DELETE FROM venue_seats WHERE venue_id=?",(venue_id,))
+    connection.executemany("""
+        INSERT INTO venue_seats(venue_id,seat_label,row_label,seat_number,accessible)
+        VALUES(?,?,?,?,?)
+    """,[(venue_id,*seat) for seat in seats])
+    _audit(connection,"configure_layout","venue",venue_id,
+           f"Configured {rows} rows and {seats_per_row} seats per row; accessible seat count {len(accessible)}.")
+    connection.commit()
+    connection.close()
+    flash(f"Venue layout saved with {len(seats)} seats.", "success")
+    return redirect(url_for("operations.workspace"))
+
+
+@operations_bp.post("/students/<int:student_id>/accommodations")
+def record_exam_accommodation(student_id):
+    if session.get("role") not in {"admin","registrar"}:
+        abort(403)
+    year = " ".join((request.form.get("academic_year") or "").split())[:20]
+    semester = " ".join((request.form.get("semester") or "").split())[:40]
+    reference = " ".join((request.form.get("source_reference") or "").split())[:500]
+    accessible = request.form.get("requires_accessible_seat") == "on"
+    try:
+        extra = int(request.form.get("extra_time_minutes","0"))
+    except ValueError:
+        extra = -1
+    if not year or not semester or len(reference)<8 or not 0<=extra<=240:
+        flash("Provide the academic period, official accommodation reference and valid extra time.", "error")
+        return redirect(url_for("registry.students"))
+    connection=db()
+    if not connection.execute("SELECT 1 FROM students WHERE id=?",(student_id,)).fetchone():
+        connection.close()
+        abort(404)
+    connection.execute("""
+        INSERT INTO student_exam_accommodations
+            (student_id,academic_year,semester,requires_accessible_seat,extra_time_minutes,source_reference,approved_by)
+        VALUES(?,?,?,?,?,?,?)
+        ON CONFLICT(student_id,academic_year,semester) DO UPDATE SET
+            requires_accessible_seat=excluded.requires_accessible_seat,
+            extra_time_minutes=excluded.extra_time_minutes,
+            source_reference=excluded.source_reference,
+            approved_by=excluded.approved_by,approved_at=CURRENT_TIMESTAMP
+    """,(student_id,year,semester,int(accessible),extra,reference,session["user_id"]))
+    _audit(connection,"record_accommodation","student",student_id,
+           "Recorded approved exam accommodation flags with an official source reference; no diagnosis is stored.")
+    connection.commit()
+    connection.close()
+    flash("Exam accommodation recorded.", "success")
+    return redirect(url_for("registry.students"))
+
+
+@operations_bp.post("/sessions/<int:session_id>/allocate-seats")
+def allocate_session_seats(session_id):
+    if not _require_admin():
+        abort(403)
+    connection=db()
+    target=connection.execute("""
+        SELECT id,venue_id,academic_year,semester,status
+        FROM examination_sessions WHERE id=?
+    """,(session_id,)).fetchone()
+    if not target or not target["venue_id"] or target["status"] not in {"scheduled"}:
+        connection.close()
+        flash("Seat allocation requires a scheduled session with an assigned venue.", "error")
+        return redirect(url_for("operations.workspace"))
+    if connection.execute("SELECT 1 FROM session_seat_assignments WHERE session_id=? LIMIT 1",(session_id,)).fetchone():
+        connection.close()
+        flash("This session already has seat assignments. Use a formal rescheduling workflow rather than overwriting them.", "error")
+        return redirect(url_for("operations.workspace"))
+    candidates=connection.execute("""
+        SELECT c.student_id,
+               COALESCE(a.requires_accessible_seat,0) AS requires_accessible_seat
+        FROM session_candidates c
+        LEFT JOIN student_exam_accommodations a
+          ON a.student_id=c.student_id AND a.academic_year=? AND a.semester=?
+        WHERE c.session_id=?
+        ORDER BY COALESCE(a.requires_accessible_seat,0) DESC,c.student_id
+    """,(target["academic_year"],target["semester"],session_id)).fetchall()
+    seats=connection.execute("""
+        SELECT * FROM venue_seats WHERE venue_id=? AND active=1
+        ORDER BY accessible DESC,row_label,seat_number
+    """,(target["venue_id"],)).fetchall()
+    accessible_needed=sum(1 for item in candidates if item["requires_accessible_seat"])
+    accessible_available=sum(1 for item in seats if item["accessible"])
+    if len(seats)<len(candidates) or accessible_available<accessible_needed:
+        connection.close()
+        flash("Seat allocation blocked: configure enough active seats and accessible seats for approved accommodations.", "error")
+        return redirect(url_for("operations.workspace"))
+    accessible_seats=[seat for seat in seats if seat["accessible"]]
+    standard_seats=[seat for seat in seats if not seat["accessible"]]
+    assignments=[]
+    for candidate in candidates:
+        pool=accessible_seats if candidate["requires_accessible_seat"] else standard_seats
+        if not pool:
+            pool=accessible_seats
+        seat=pool.pop(0)
+        assignments.append((session_id,candidate["student_id"],seat["id"],session["user_id"],seat["seat_label"]))
+    for sid,student_id,seat_id,actor,label in assignments:
+        connection.execute("""
+            INSERT INTO session_seat_assignments(session_id,student_id,venue_seat_id,assigned_by)
+            VALUES(?,?,?,?)
+        """,(sid,student_id,seat_id,actor))
+        connection.execute("UPDATE session_candidates SET seat_label=? WHERE session_id=? AND student_id=?",
+                           (label,sid,student_id))
+    _audit(connection,"allocate_seats","examination_session",session_id,
+           f"Allocated {len(assignments)} seats, including {accessible_needed} approved accessible accommodations.")
+    connection.commit()
+    connection.close()
+    flash(f"Allocated {len(assignments)} seats with approved accessible seating.", "success")
     return redirect(url_for("operations.workspace"))
 
 
