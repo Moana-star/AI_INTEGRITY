@@ -3,6 +3,7 @@ import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
+import re
 
 from modules import institutional_registry, operations, integrity, student_portal
 
@@ -44,6 +45,8 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
         ]
         for item in self.patches:
             item.start()
+        operations.SCHEMA_READY = False
+        integrity.SCHEMA_READY = False
         institutional_registry.ensure_schema()
         operations.ensure_schema()
         integrity.ensure_schema()
@@ -52,7 +55,42 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
     def tearDown(self):
         for item in self.patches:
             item.stop()
+        operations.SCHEMA_READY = False
+        integrity.SCHEMA_READY = False
         os.unlink(self.path)
+
+    def test_incident_reporter_cannot_review_own_case(self):
+        from app import app as flask_app
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO users(id,username) VALUES(1,'reporter')")
+        connection.execute("INSERT INTO students(student_number,first_name,last_name) VALUES('ST/2','Test','Student')")
+        connection.execute("INSERT INTO incidents(student_id,incident_type) VALUES(1,'Observed event')")
+        connection.execute("INSERT INTO incident_case_workflow(incident_id,case_status,reported_by) VALUES(1,'reported',1)")
+        connection.commit()
+        connection.close()
+        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
+        client = flask_app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session['user_id'] = 1
+            browser_session['role'] = 'admin'
+        page = client.get('/forgot-password')
+        token = re.search(rb'<meta name="csrf-token" content="([^"]+)"', page.data).group(1).decode()
+        response = client.post('/integrity/incidents/1/status', data={
+            'case_status': 'under_review',
+            'review_note': 'Review attempted by the original incident reporter.',
+            'csrf_token': token,
+        })
+        self.assertEqual(response.status_code, 403)
+        connection = sqlite3.connect(self.path)
+        status = connection.execute("SELECT case_status FROM incident_case_workflow WHERE incident_id=1").fetchone()[0]
+        connection.close()
+        self.assertEqual(status, 'reported')
+
+    def test_schema_records_incident_reporter_for_conflict_checks(self):
+        connection = sqlite3.connect(self.path)
+        columns = {row[1] for row in connection.execute('PRAGMA table_info(incident_case_workflow)')}
+        connection.close()
+        self.assertIn('reported_by', columns)
 
     def test_student_portal_and_case_response_tables_exist(self):
         connection = sqlite3.connect(self.path)
