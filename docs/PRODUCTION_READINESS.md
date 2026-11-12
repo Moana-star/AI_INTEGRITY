@@ -23,9 +23,10 @@ This checklist distinguishes implemented development workflows from the work req
 - The legacy username-only password-recovery flow has been disabled. Knowing or guessing a username must never authorize a password change.
 - The password-reset page no longer accepts a new password until a verified institutional recovery channel is integrated.
 - Flask-WTF CSRF validation is enabled for unsafe HTTP requests. The shared layout exposes a session-bound token, and the form helper attaches it to standard and dynamically submitted forms.
+- Staff and student login endpoints are limited to five attempts per minute per source IP. Production startup requires a shared Redis-compatible `RATELIMIT_STORAGE_URI`; the in-memory fallback is for local development only.
 - Regression tests cover missing CSRF tokens and attempts to use the former reset flow, including a forged legacy reset-session value.
 
-These are targeted security improvements, not a substitute for the remaining controls below. Login throttling, MFA, complete RBAC, secure session lifecycle, and comprehensive authorization testing remain required.
+These are targeted security improvements, not a substitute for the remaining controls below. MFA, complete RBAC, secure session lifecycle, account-level throttling/lockout policy, and comprehensive authorization testing remain required.
 
 ## Required before any real student data
 
@@ -42,7 +43,8 @@ These are targeted security improvements, not a substitute for the remaining con
 
 - [ ] Replace SQLite with a supported PostgreSQL deployment and test migrations.
 - [x] Implement CSRF protection for state-changing requests; verify every page and non-form client integration during end-to-end testing.
-- [ ] Implement login rate limiting, account lockout policy and MFA for privileged roles.
+- [x] Add IP-based login rate limits for staff and student sign-in; configure shared Redis-compatible storage before production.
+- [ ] Add account-level throttling/lockout policy and MFA for privileged roles.
 - [ ] Replace broad administrator/invigilator roles with least-privilege registrar, examination officer, invigilator, reviewer and system-administrator permissions.
 - [ ] Enforce password reset, recovery, session expiration and session revocation policies.
 - [ ] Configure persistent high-entropy secrets and HTTPS-only secure cookies.
@@ -89,7 +91,7 @@ These are targeted security improvements, not a substitute for the remaining con
 
 - The application still uses SQLite and raw SQLite access throughout the legacy application.
 - The student/staff role model is not yet a complete institutional RBAC model.
-- CSRF validation is enabled; login rate limiting is not yet implemented.
+- CSRF validation and IP-based login rate limiting are enabled. Production must configure shared Redis-compatible rate-limit storage; account-level lockout and MFA remain outstanding.
 - Evidence files are private by path and access control, but encrypted storage, malware scanning and retention automation are not yet implemented.
 - The current test suite is a small automated foundation, not comprehensive coverage.
 - The biometric provider is not connected.
