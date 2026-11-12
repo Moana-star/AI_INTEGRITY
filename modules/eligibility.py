@@ -239,6 +239,12 @@ def evaluate_candidate():
         flash("Academic year and semester are required.", "error")
         return redirect(url_for("eligibility.workspace"))
     connection = db()
+    valid_student = connection.execute("SELECT 1 FROM students WHERE id=?", (student_id,)).fetchone()
+    valid_unit = connection.execute("SELECT 1 FROM academic_units WHERE id=?", (unit_id,)).fetchone()
+    if not valid_student or not valid_unit:
+        connection.close()
+        flash("The selected student or academic unit does not exist in the institutional registry.", "error")
+        return redirect(url_for("eligibility.workspace"))
     try:
         decision_id, result, reasons, policy = evaluate(
             connection, student_id, unit_id, year[:20], semester[:40], session["user_id"])
