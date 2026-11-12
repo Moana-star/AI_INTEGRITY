@@ -115,7 +115,7 @@ def ensure_schema():
 @registry_bp.before_request
 def prepare_registry():
     global _schema_ready
-    if "user_id" not in session or session.get("role") != "admin":
+    if "user_id" not in session or session.get("role") not in {"admin", "registrar"}:
         return redirect(url_for("login"))
     if not _schema_ready:
         ensure_schema()
