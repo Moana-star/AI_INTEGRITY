@@ -86,6 +86,29 @@ def ensure_schema():
             FOREIGN KEY (actor_user_id) REFERENCES users(id)
         );
 
+        CREATE TABLE IF NOT EXISTS academic_history_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL CHECK(event_type IN
+                ('programme_change','progression','academic_status_change','deferment','suspension','graduation')),
+            effective_date TEXT NOT NULL,
+            previous_value TEXT,
+            new_value TEXT,
+            reason TEXT NOT NULL,
+            recorded_by INTEGER NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE RESTRICT,
+            FOREIGN KEY(recorded_by) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_academic_history_student_date
+            ON academic_history_events(student_id, effective_date DESC, id DESC);
+        CREATE TRIGGER IF NOT EXISTS academic_history_no_update
+        BEFORE UPDATE ON academic_history_events
+        BEGIN SELECT RAISE(ABORT, 'Academic history events are append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS academic_history_no_delete
+        BEFORE DELETE ON academic_history_events
+        BEGIN SELECT RAISE(ABORT, 'Academic history events are append-only'); END;
+
         CREATE TABLE IF NOT EXISTS examination_attendance (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             examination_id INTEGER NOT NULL,
@@ -322,3 +345,85 @@ def import_students():
     except (UnicodeDecodeError, csv.Error):
         return render_template("student_registry_import.html",
                                error="The file could not be read as a UTF-8 CSV. Export it as UTF-8 CSV and try again.")
+
+
+HISTORY_EVENT_TYPES = {
+    "programme_change", "progression", "academic_status_change",
+    "deferment", "suspension", "graduation",
+}
+
+
+@registry_bp.route("/students/<int:student_id>/history", methods=["GET", "POST"])
+def academic_history(student_id):
+    """Registrar-managed, append-only academic history for one student."""
+    connection = get_connection()
+    student = connection.execute("""
+        SELECT s.id, s.student_number, s.first_name, s.last_name, s.course,
+               COALESCE(p.academic_status, 'active') AS academic_status
+        FROM students s LEFT JOIN student_profiles p ON p.student_id=s.id
+        WHERE s.id=?
+    """, (student_id,)).fetchone()
+    if not student:
+        connection.close()
+        from flask import abort
+        abort(404)
+
+    if request.method == "POST":
+        event_type = _clean(request.form.get("event_type"), 40).lower()
+        effective_date = _clean(request.form.get("effective_date"), 10)
+        previous_value = _clean(request.form.get("previous_value"), 240) or None
+        new_value = _clean(request.form.get("new_value"), 240) or None
+        reason = _clean(request.form.get("reason"), 1000)
+        try:
+            from datetime import date
+            date.fromisoformat(effective_date)
+        except (TypeError, ValueError):
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="Enter an effective date in YYYY-MM-DD format.")
+        if event_type not in HISTORY_EVENT_TYPES or len(reason) < 10:
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="Choose a valid history event and provide a reason of at least 10 characters.")
+        if event_type == "academic_status_change" and new_value not in ACADEMIC_STATUSES:
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="The new academic status must be an approved status value.")
+        try:
+            connection.execute("""
+                INSERT INTO academic_history_events
+                    (student_id,event_type,effective_date,previous_value,new_value,reason,recorded_by)
+                VALUES (?,?,?,?,?,?,?)
+            """, (student_id,event_type,effective_date,previous_value,new_value,reason,session["user_id"]))
+            if event_type == "academic_status_change":
+                connection.execute("""
+                    INSERT INTO student_profiles(student_id,academic_status,updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(student_id) DO UPDATE SET
+                      academic_status=excluded.academic_status, updated_at=CURRENT_TIMESTAMP
+                """, (student_id,new_value))
+            _record_audit(connection,"append","academic_history",student_id,
+                          f"Recorded {event_type} effective {effective_date}.")
+            connection.commit()
+            flash("Academic history event recorded. Existing history entries cannot be edited or deleted.", "success")
+            connection.close()
+            return redirect(url_for("registry.academic_history", student_id=student_id))
+        except sqlite3.IntegrityError:
+            connection.rollback()
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="The history event could not be recorded. Check the supplied details and try again.")
+
+    events = connection.execute("""
+        SELECT h.*, u.username AS recorded_by_username
+        FROM academic_history_events h JOIN users u ON u.id=h.recorded_by
+        WHERE h.student_id=?
+        ORDER BY h.effective_date DESC, h.id DESC
+    """, (student_id,)).fetchall()
+    connection.close()
+    return render_template("academic_history.html", student=student, events=events,
+                           event_types=sorted(HISTORY_EVENT_TYPES))
