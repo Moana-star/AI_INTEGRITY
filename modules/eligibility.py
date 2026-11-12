@@ -261,6 +261,14 @@ def evaluate_candidate():
     try:
         decision_id, result, reasons, policy = evaluate(
             connection, student_id, unit_id, year[:20], semester[:40], session["user_id"])
+        connection.execute("""
+            UPDATE session_candidates
+            SET eligibility_status=?, eligibility_note=?
+            WHERE student_id=? AND session_id IN (
+                SELECT id FROM examination_sessions
+                WHERE unit_id=? AND academic_year=? AND semester=? AND status='scheduled'
+            )
+        """, (result, " ".join(reasons)[:500], student_id, unit_id, year[:20], semester[:40]))
         connection.execute("""INSERT INTO audit_events
             (actor_user_id,action,entity_type,entity_id,summary)
             VALUES (?,'evaluate','eligibility_decision',?,?)""",
