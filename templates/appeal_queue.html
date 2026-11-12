@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Independent Appeals | EIMS{% endblock %}
 {% block content %}
-<header class="page-header"><div><p class="eyebrow">Examination integrity · independent review</p><h1>Student appeals</h1><p class="page-subtitle">Appeals are assessed separately from the original incident case.</p></div></header>
+<header class="page-header"><div><p class="eyebrow">Examination integrity · independent review</p><h1>Student appeals</h1><a class="btn btn-secondary" href="{{ url_for('appeals.senate_review_queue') }}">Senate verdict reviews</a><p class="page-subtitle">Appeals are assessed separately from the original incident case.</p></div></header>
 <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Appeal</th><th>Student</th><th>Original incident</th><th>Submitted</th><th>Status</th><th>Independent decision</th></tr></thead><tbody>
 {% for a in appeals %}<tr><td>#{{ a.id }}<small class="cell-note">{{ a.appeal_text }}</small></td><td>{{ a.student_number }} · {{ a.first_name }} {{ a.last_name }}</td><td>{{ a.incident_type }} · {{ a.severity|title }}</td><td>{{ a.submitted_at }}</td><td>{{ a.appeal_status|replace('_',' ')|title }}</td><td>
 {% if a.appeal_status in ['submitted','under_review'] and session.get('user_id') not in [a.reported_by,a.original_reviewer] %}
