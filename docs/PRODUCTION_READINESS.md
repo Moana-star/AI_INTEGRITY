@@ -11,6 +11,9 @@ This checklist distinguishes implemented development workflows from the work req
 - Examination sessions and candidate lists derived from enrolments.
 - Venue registration, capacity checks and invigilator assignment.
 - Seat labels and manual/student-card attendance check-in/check-out.
+- Session-scoped attendance CSV export restricted to administrators, with an audit event and no-store response headers.
+- Post-session reconciliation that flags missing check-ins as disputed for human review; it does not automatically declare students absent.
+- Minimal `/healthz` database readiness endpoint that returns no connection details.
 - Student portal accounts provisioned by an administrator, with forced first-login password change.
 - Student access to their own profile, enrolments, sessions, attendance and incident notices.
 - Student response submission when an authorized reviewer requests a response.
