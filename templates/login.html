@@ -7,7 +7,7 @@
 <label for="password">Password</label><div class="password-field"><input type="password" id="password" name="password" autocomplete="current-password" required><button class="password-toggle" type="button" data-password-toggle="password" aria-label="Show password" aria-pressed="false">Show</button></div><small class="field-hint">Use the password provided in the demo accounts below.</small>
 <label for="role">Role</label><select id="role" name="role" required><option value="">Select role</option><option value="admin">Administrator</option><option value="invigilator">Invigilator</option></select>
 <button type="submit" class="btn btn-primary btn-block">Sign in</button></form>
-<nav class="auth-links" aria-label="Account help"><a href="{{ url_for('forgot_password') }}">Forgot password?</a><span>Don't have an account? <a href="{{ url_for('register') }}">Create an account</a></span></nav>
+<nav class="auth-links" aria-label="Account help"><a href="{{ url_for('forgot_password') }}">Forgot password?</a><span>Don't have an account? <a href="{{ url_for('register') }}">Create an account</a></span><a href="{{ url_for('student_portal.login') }}">Student portal sign in</a></nav>
 <details class="login-hint"><summary>Presentation demo accounts</summary><p>Administrator: <strong>admin</strong> / Admin@123</p><p>Invigilator: <strong>jkamau</strong> / Invig@123</p></details></section></main>
 <script src="{{ url_for('static', filename='js/auth.js') }}" defer></script>
 {% endblock %}
