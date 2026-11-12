@@ -30,6 +30,9 @@ def get_connection():
     return connection
 
 
+_schema_ready = False
+
+
 def ensure_schema():
     """Create additive registry tables; safe to run repeatedly on existing DBs."""
     connection = get_connection()
@@ -111,9 +114,12 @@ def ensure_schema():
 
 @registry_bp.before_request
 def prepare_registry():
+    global _schema_ready
     if "user_id" not in session or session.get("role") != "admin":
         return redirect(url_for("login"))
-    ensure_schema()
+    if not _schema_ready:
+        ensure_schema()
+        _schema_ready = True
 
 
 def _record_audit(connection, action, entity_type, entity_id, summary):
