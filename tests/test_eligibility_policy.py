@@ -103,13 +103,13 @@ class EligibilityPolicyTests(unittest.TestCase):
 
     def test_approved_policy_marks_registered_active_student_eligible(self):
         self.add_policy()
+        self.add_evidence()
         connection = self.connection()
         connection.execute("""
             INSERT INTO student_unit_enrolments
                 (student_id,unit_id,academic_year,semester,enrolment_status)
             VALUES(1,1,'2026/2027','Semester 1','registered')
         """)
-        self.add_evidence()
         _, result, reasons, policy = eligibility.evaluate(
             connection,1,1,"2026/2027","Semester 1",1)
         connection.close()
@@ -119,6 +119,7 @@ class EligibilityPolicyTests(unittest.TestCase):
 
     def test_eligibility_decision_updates_only_scheduled_session_candidates(self):
         self.add_policy()
+        self.add_evidence()
         connection = self.connection()
         connection.execute("""
             INSERT INTO student_unit_enrolments
@@ -137,7 +138,6 @@ class EligibilityPolicyTests(unittest.TestCase):
             INSERT INTO session_candidates(session_id,student_id,eligibility_status,eligibility_note)
             VALUES(?,1,'pending','Waiting')
         """,[(10,),(11,)])
-        self.add_evidence()
         _, result, reasons, _ = eligibility.evaluate(
             connection,1,1,"2026/2027","Semester 1",1)
         changed = eligibility.apply_decision_to_scheduled_candidates(
@@ -153,6 +153,7 @@ class EligibilityPolicyTests(unittest.TestCase):
 
     def test_suspended_student_is_not_eligible(self):
         self.add_policy()
+        self.add_evidence()
         connection = self.connection()
         connection.execute("UPDATE student_profiles SET academic_status='suspended' WHERE student_id=1")
         connection.execute("""
@@ -160,7 +161,6 @@ class EligibilityPolicyTests(unittest.TestCase):
                 (student_id,unit_id,academic_year,semester,enrolment_status)
             VALUES(1,1,'2026/2027','Semester 1','registered')
         """)
-        self.add_evidence()
         _, result, reasons, _ = eligibility.evaluate(
             connection,1,1,"2026/2027","Semester 1",1)
         connection.close()
