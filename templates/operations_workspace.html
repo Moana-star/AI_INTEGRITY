@@ -5,8 +5,9 @@
   <div><p class="eyebrow">INSTITUTIONAL OPERATIONS</p><h1>Academic operations</h1>
   <p class="muted">Manage academic units, enrolments, examination sessions and invigilator assignments.</p></div>
 </section>
-{% if is_admin %}
+{% if can_manage_academics or is_admin %}
 <div class="dashboard-grid" style="align-items:start">
+{% if can_manage_academics %}
   <section class="panel form-panel">
     <h2>Create academic unit</h2>
     <form method="post" action="{{ url_for('operations.create_unit') }}" class="stack-form">
@@ -27,6 +28,8 @@
       <button class="button button-primary" type="submit">Record enrolment</button>
     </form>
   </section>
+{% endif %}
+{% if is_admin %}
   <section class="panel form-panel">
     <h2>Register examination venue</h2>
     <form method="post" action="{{ url_for('operations.create_venue') }}" class="stack-form">
@@ -51,6 +54,7 @@
       <button class="button button-primary" type="submit">Create session and candidate list</button>
     </form>
   </section>
+{% endif %}
 </div>
 {% endif %}
 <section class="panel" style="margin-top:24px">
