@@ -137,6 +137,7 @@ class EligibilityPolicyTests(unittest.TestCase):
             INSERT INTO session_candidates(session_id,student_id,eligibility_status,eligibility_note)
             VALUES(?,1,'pending','Waiting')
         """,[(10,),(11,)])
+        self.add_evidence()
         _, result, reasons, _ = eligibility.evaluate(
             connection,1,1,"2026/2027","Semester 1",1)
         changed = eligibility.apply_decision_to_scheduled_candidates(
