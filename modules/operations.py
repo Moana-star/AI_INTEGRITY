@@ -757,8 +757,10 @@ def attendance(session_id):
     candidates = connection.execute("""
         SELECT c.student_id, c.eligibility_status, c.eligibility_note, c.seat_label,
                s.student_number, s.first_name, s.last_name, a.status, a.check_in_at,
-               a.check_out_at, a.verification_method, a.verification_status
+               a.check_out_at, a.verification_method, a.verification_status,
+               COALESCE(sa.extra_time_minutes,0) AS extra_time_minutes
         FROM session_candidates c JOIN students s ON s.id=c.student_id
+        LEFT JOIN session_seat_assignments sa ON sa.session_id=c.session_id AND sa.student_id=c.student_id
         LEFT JOIN session_attendance a ON a.session_id=c.session_id AND a.student_id=c.student_id
         WHERE c.session_id=? ORDER BY s.student_number
     """, (session_id,)).fetchall()
