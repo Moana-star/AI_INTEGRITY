@@ -2,7 +2,7 @@
 {% block title %}Examination Eligibility | EIMS{% endblock %}
 {% block content %}
 <header class="page-header"><div><p class="eyebrow">Kisii University · Examination Office</p><h1>Eligibility policy and decisions</h1><p class="page-subtitle">Versioned rules, independent approval and explainable student-by-unit decisions.</p></div></header>
-<section class="panel"><h2>Create policy draft</h2><p class="field-hint">Only configure rules supported by an approved university policy. This first engine supports active academic status and registered unit enrolment; it does not infer fee clearance, progression thresholds or other requirements.</p>
+<section class="panel"><h2>Create policy draft</h2><p class="field-hint">Only configure rules supported by an approved university policy. Rules are derived from the published Kisii University Student Handbook (2019) and must be independently approved before they can determine eligibility. Evidence must be recorded from authorized university systems; this application does not independently verify finance or lecture registers.</p>
 <form method="post" action="{{ url_for('eligibility.create_policy') }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="form-grid">
@@ -13,12 +13,25 @@
 </div>
 <p><label><input type="checkbox" name="require_active_student" checked required> Require active academic status</label></p>
 <p><label><input type="checkbox" name="require_registered_unit" checked required> Require registered enrolment in the selected unit and semester</label></p>
+<p><label><input type="checkbox" name="require_fee_clearance" checked required> Require fee-clearance evidence</label></p>
+<div class="form-grid"><label>Minimum lecture attendance (%)<input name="minimum_attendance_percentage" type="number" min="0" max="100" step="0.1" value="80" required></label><label>Minimum CATs required<input name="minimum_cats_required" type="number" min="1" max="20" value="2" required></label></div>
 <button class="btn btn-primary" type="submit">Save policy draft</button>
 </form></section>
 <section class="panel"><h2>Policy register</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Policy</th><th>Version</th><th>Effective from</th><th>Official source reference</th><th>Status</th><th>Created by</th><th>Approved by</th><th>Action</th></tr></thead><tbody>
 {% for p in policies %}<tr><td>{{ p.policy_code }}</td><td>{{ p.version }}</td><td>{{ p.effective_from }}</td><td>{{ p.source_reference or 'Not recorded' }}</td><td>{{ p.approval_status|capitalize }}</td><td>{{ p.creator }}</td><td>{{ p.approver or '—' }}</td><td>{% if session.get('role') == 'admin' and p.approval_status == 'draft' and p.created_by != session.get('user_id') %}<form method="post" action="{{ url_for('eligibility.approve_policy', policy_id=p.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="approval_reason" minlength="10" maxlength="500" placeholder="Independent approval reason" required><button class="btn btn-sm btn-primary" type="submit">Approve</button></form>{% else %}—{% endif %}</td></tr>
 {% else %}<tr><td colspan="8">No eligibility policies have been configured.</td></tr>{% endfor %}
 </tbody></table></div></section>
+<section class="panel"><h2>Record verified course evidence</h2><p class="field-hint">Registrar or authorized examination staff must transcribe evidence from approved fee and academic attendance/CAT records. Provide the official source or record reference. Missing evidence leaves eligibility pending.</p>
+<form method="post" action="{{ url_for('eligibility.record_evidence') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="form-grid">
+<label>Student<select name="student_id" required><option value="">Choose student</option>{% for s in students %}<option value="{{ s.id }}">{{ s.student_number }} · {{ s.first_name }} {{ s.last_name }}</option>{% endfor %}</select></label>
+<label>Academic unit<select name="unit_id" required><option value="">Choose unit</option>{% for u in units %}<option value="{{ u.id }}">{{ u.unit_code }} · {{ u.unit_name }}</option>{% endfor %}</select></label>
+<label>Academic year<input name="academic_year" maxlength="20" placeholder="2026/2027" required></label><label>Semester<input name="semester" maxlength="40" placeholder="Semester 1" required></label>
+<label>Total lecture sessions<input name="lectures_total" type="number" min="1" required></label><label>Sessions attended<input name="lectures_attended" type="number" min="0" required></label>
+<label>CATs required for this unit<input name="cats_required" type="number" min="1" max="20" value="2" required></label><label>CATs sat<input name="cats_sat" type="number" min="0" max="20" required></label>
+<label>Fee clearance<select name="fees_cleared" required><option value="no">Not cleared</option><option value="yes">Cleared</option></select></label>
+<label class="form-grid-full">Evidence reference<input name="evidence_reference" minlength="8" maxlength="500" placeholder="Approved finance receipt/ledger and attendance/CAT register reference" required></label>
+</div><button class="btn btn-primary" type="submit">Save evidence record</button></form></section>
 <section class="panel"><h2>Evaluate a candidate</h2><p class="field-hint">Until an effective policy has been independently approved, evaluations are recorded as pending. A pending result is not an exam clearance decision.</p>
 <form method="post" action="{{ url_for('eligibility.evaluate_candidate') }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
