@@ -133,6 +133,33 @@ def ensure_schema():
     connection.close()
 
 
+def session_activation_blockers(connection, session_id):
+    """Return hard blockers from the published minimum session controls."""
+    target = connection.execute("""
+        SELECT es.venue_id, v.active AS venue_active, v.capacity,
+               (SELECT COUNT(*) FROM session_candidates c WHERE c.session_id=es.id) AS candidates
+        FROM examination_sessions es
+        LEFT JOIN venues v ON v.id=es.venue_id
+        WHERE es.id=?
+    """, (session_id,)).fetchone()
+    if not target:
+        return ["The examination session does not exist."]
+    blockers = []
+    if target["venue_id"] is None or not target["venue_active"]:
+        blockers.append("An active examination venue must be assigned before activation.")
+    elif target["candidates"] > target["capacity"]:
+        blockers.append("Candidate count exceeds the assigned venue capacity.")
+    assigned = connection.execute("""
+        SELECT COUNT(DISTINCT si.invigilator_id)
+        FROM session_invigilators si
+        JOIN invigilators i ON i.id=si.invigilator_id
+        WHERE si.session_id=? AND i.status='active'
+    """, (session_id,)).fetchone()[0]
+    if assigned < 2:
+        blockers.append("At least two active invigilators must be assigned before activation.")
+    return blockers
+
+
 def _audit(connection, action, entity, entity_id, summary):
     connection.execute("""
         INSERT INTO audit_events(actor_user_id, action, entity_type, entity_id, summary)
@@ -466,6 +493,12 @@ def update_session_status(session_id):
         connection.close()
         flash("A completed or cancelled session cannot be reopened or changed.", "error")
         return redirect(url_for("operations.workspace"))
+    if new_status == "active":
+        blockers = session_activation_blockers(connection, session_id)
+        if blockers:
+            connection.close()
+            flash("Session activation blocked: " + " ".join(blockers), "error")
+            return redirect(url_for("operations.workspace"))
     connection.execute("UPDATE examination_sessions SET status=? WHERE id=?", (new_status, session_id))
     _audit(connection, "status_change", "examination_session", session_id,
            f"Session status changed from {current['status']} to {new_status}.")
