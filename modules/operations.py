@@ -141,11 +141,31 @@ def ensure_schema():
             FOREIGN KEY(student_id) REFERENCES students(id),
             FOREIGN KEY(approved_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS student_exam_accommodation_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            academic_year TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            requires_accessible_seat INTEGER NOT NULL,
+            extra_time_minutes INTEGER NOT NULL,
+            source_reference TEXT NOT NULL,
+            recorded_by INTEGER NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(recorded_by) REFERENCES users(id)
+        );
+        CREATE TRIGGER IF NOT EXISTS student_exam_accommodation_history_no_update
+        BEFORE UPDATE ON student_exam_accommodation_history
+        BEGIN SELECT RAISE(ABORT, 'Accommodation history is append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS student_exam_accommodation_history_no_delete
+        BEFORE DELETE ON student_exam_accommodation_history
+        BEGIN SELECT RAISE(ABORT, 'Accommodation history is append-only'); END;
         CREATE TABLE IF NOT EXISTS session_seat_assignments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
             student_id INTEGER NOT NULL,
             venue_seat_id INTEGER NOT NULL,
+            extra_time_minutes INTEGER NOT NULL DEFAULT 0 CHECK(extra_time_minutes BETWEEN 0 AND 240),
             assigned_by INTEGER NOT NULL,
             assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(session_id,student_id),
@@ -446,6 +466,11 @@ def record_exam_accommodation(student_id):
         connection.close()
         abort(404)
     connection.execute("""
+        INSERT INTO student_exam_accommodation_history
+            (student_id,academic_year,semester,requires_accessible_seat,extra_time_minutes,source_reference,recorded_by)
+        VALUES(?,?,?,?,?,?,?)
+    """,(student_id,year,semester,int(accessible),extra,reference,session["user_id"]))
+    connection.execute("""
         INSERT INTO student_exam_accommodations
             (student_id,academic_year,semester,requires_accessible_seat,extra_time_minutes,source_reference,approved_by)
         VALUES(?,?,?,?,?,?,?)
@@ -482,7 +507,8 @@ def allocate_session_seats(session_id):
         return redirect(url_for("operations.workspace"))
     candidates=connection.execute("""
         SELECT c.student_id,
-               COALESCE(a.requires_accessible_seat,0) AS requires_accessible_seat
+               COALESCE(a.requires_accessible_seat,0) AS requires_accessible_seat,
+               COALESCE(a.extra_time_minutes,0) AS extra_time_minutes
         FROM session_candidates c
         LEFT JOIN student_exam_accommodations a
           ON a.student_id=c.student_id AND a.academic_year=? AND a.semester=?
@@ -507,12 +533,13 @@ def allocate_session_seats(session_id):
         if not pool:
             pool=accessible_seats
         seat=pool.pop(0)
-        assignments.append((session_id,candidate["student_id"],seat["id"],session["user_id"],seat["seat_label"]))
-    for sid,student_id,seat_id,actor,label in assignments:
+        assignments.append((session_id,candidate["student_id"],seat["id"],candidate["extra_time_minutes"],session["user_id"],seat["seat_label"]))
+    for sid,student_id,seat_id,extra_time,actor,label in assignments:
         connection.execute("""
-            INSERT INTO session_seat_assignments(session_id,student_id,venue_seat_id,assigned_by)
-            VALUES(?,?,?,?)
-        """,(sid,student_id,seat_id,actor))
+            INSERT INTO session_seat_assignments
+                (session_id,student_id,venue_seat_id,extra_time_minutes,assigned_by)
+            VALUES(?,?,?,?,?)
+        """,(sid,student_id,seat_id,extra_time,actor))
         connection.execute("UPDATE session_candidates SET seat_label=? WHERE session_id=? AND student_id=?",
                            (label,sid,student_id))
     _audit(connection,"allocate_seats","examination_session",session_id,
