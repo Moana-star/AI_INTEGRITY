@@ -45,13 +45,17 @@ def ensure_schema():
         CREATE TABLE IF NOT EXISTS incident_appeal_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             appeal_id INTEGER NOT NULL,
-            actor_user_id INTEGER NOT NULL,
+            actor_user_id INTEGER,
+            actor_student_id INTEGER,
             from_status TEXT,
             to_status TEXT NOT NULL,
             reason TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(appeal_id) REFERENCES incident_appeals(id) ON DELETE CASCADE,
-            FOREIGN KEY(actor_user_id) REFERENCES users(id)
+            FOREIGN KEY(actor_user_id) REFERENCES users(id),
+            FOREIGN KEY(actor_student_id) REFERENCES students(id),
+            CHECK ((actor_user_id IS NOT NULL AND actor_student_id IS NULL) OR
+                   (actor_user_id IS NULL AND actor_student_id IS NOT NULL))
         );
         CREATE TRIGGER IF NOT EXISTS incident_appeal_events_no_update
         BEFORE UPDATE ON incident_appeal_events
@@ -115,6 +119,11 @@ def submit_appeal(incident_id):
             VALUES(?,?,?)
         """, (incident_id,session["student_id"],appeal_text))
         appeal_id = cursor.lastrowid
+        connection.execute("""
+            INSERT INTO incident_appeal_events
+                (appeal_id,actor_student_id,from_status,to_status,reason)
+            VALUES(?,?,NULL,'submitted','Student submitted an appeal through the authenticated portal.')
+        """, (appeal_id,session["student_id"]))
         connection.execute("""
             INSERT INTO audit_events(actor_user_id,action,entity_type,entity_id,summary)
             VALUES(NULL,'appeal_submitted','incident_appeal',?,
