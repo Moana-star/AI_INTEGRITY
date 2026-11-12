@@ -759,3 +759,69 @@ def export_attendance_csv(session_id):
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
+@operations_bp.post("/sessions/<int:session_id>/reconcile-attendance")
+def reconcile_attendance(session_id):
+    """Flag missing check-ins for human review; never infer a disciplinary absence."""
+    if not _require_admin():
+        abort(403)
+    connection = db()
+    exam_session = connection.execute(
+        "SELECT session_date, end_time, status, session_code FROM examination_sessions WHERE id=?",
+        (session_id,),
+    ).fetchone()
+    if not exam_session:
+        connection.close()
+        abort(404)
+    now = datetime.now()
+    try:
+        end_at = datetime.strptime(
+            f"{exam_session['session_date']} {exam_session['end_time']}", "%Y-%m-%d %H:%M"
+        )
+    except ValueError:
+        connection.close()
+        flash("The session date or end time is invalid; attendance was not reconciled.", "error")
+        return redirect(url_for("operations.attendance", session_id=session_id))
+    if now < end_at or exam_session["status"] == "cancelled":
+        connection.close()
+        flash("Reconciliation is available only after the scheduled session end time.", "error")
+        return redirect(url_for("operations.attendance", session_id=session_id))
+
+    missing = connection.execute("""
+        SELECT c.student_id
+        FROM session_candidates c
+        LEFT JOIN session_attendance a
+          ON a.session_id=c.session_id AND a.student_id=c.student_id
+        WHERE c.session_id=? AND c.eligibility_status='eligible'
+          AND (a.id IS NULL OR a.check_in_at IS NULL)
+          AND COALESCE(a.status, '') NOT IN ('disputed', 'present', 'late')
+    """, (session_id,)).fetchall()
+    flagged = 0
+    for candidate in missing:
+        connection.execute("""
+            INSERT INTO session_attendance
+                (session_id, student_id, status, verification_method,
+                 verification_status, verified_by, notes, updated_at)
+            VALUES (?, ?, 'disputed', 'manual', 'manual_review', ?,
+                    'No check-in was recorded by the reconciliation process; human review required.',
+                    CURRENT_TIMESTAMP)
+            ON CONFLICT(session_id, student_id) DO UPDATE SET
+                status='disputed', verification_status='manual_review',
+                verified_by=excluded.verified_by,
+                notes='No check-in was recorded by the reconciliation process; human review required.',
+                updated_at=CURRENT_TIMESTAMP
+            WHERE session_attendance.check_in_at IS NULL
+              AND session_attendance.status NOT IN ('present', 'late', 'disputed')
+        """, (session_id, candidate["student_id"], session.get("user_id")))
+        flagged += connection.execute("SELECT changes()").fetchone()[0]
+    _audit(
+        connection, "attendance_reconciliation", "examination_session", session_id,
+        f"Flagged {flagged} candidate record(s) for human review after session {exam_session['session_code']}; no automatic absence finding was made.",
+    )
+    connection.commit()
+    connection.close()
+    flash(
+        f"Reconciliation complete: {flagged} missing check-in record(s) flagged for human review. No student was automatically declared absent.",
+        "success",
+    )
+    return redirect(url_for("operations.attendance", session_id=session_id))
+
