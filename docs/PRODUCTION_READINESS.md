@@ -18,6 +18,7 @@ This checklist distinguishes implemented development workflows from the work req
 - Student access to their own profile, enrolments, sessions, attendance and incident notices.
 - Student response submission when an authorized reviewer requests a response.
 - Incident workflow statuses and review notes.
+- Records the staff reporter and prevents that same account from changing the case review status (initial conflict-of-interest safeguard).
 - Private evidence file storage, file-size/type checks, SHA-256 checksums and administrator-only download audit.
 - Automated Python compilation and unit-test workflow.
 
