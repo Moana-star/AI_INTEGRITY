@@ -34,7 +34,7 @@
           <td>{{ student.faculty or '—' }}<small class="cell-note">{{ student.department or 'Department not recorded' }}</small></td>
           <td>{{ student.year_of_study or '—' }}<small class="cell-note">{{ student.academic_year or '' }} {{ student.semester or '' }}</small></td>
           <td><span class="badge badge-{{ 'active' if student.academic_status == 'active' else 'scheduled' }}">{{ student.academic_status|capitalize }}</span></td>
-          <td><a class="btn btn-sm btn-ghost" href="{{ url_for('registry.edit_student', student_id=student.id) }}">View / Edit</a><form method="post" action="{{ url_for('student_portal.provision_account', student_id=student.id) }}" class="inline-form"><button class="btn btn-sm btn-ghost" type="submit">Provision / reset portal</button></form></td>
+          <td><a class="btn btn-sm btn-ghost" href="{{ url_for('registry.edit_student', student_id=student.id) }}">View / Edit</a> <a class="btn btn-sm btn-ghost" href="{{ url_for('registry.academic_history', student_id=student.id) }}">Academic history</a><form method="post" action="{{ url_for('student_portal.provision_account', student_id=student.id) }}" class="inline-form"><button class="btn btn-sm btn-ghost" type="submit">Provision / reset portal</button></form></td>
         </tr>
       {% else %}
         <tr><td colspan="7" class="empty-row">No student records match this search.</td></tr>
