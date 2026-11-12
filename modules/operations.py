@@ -223,8 +223,8 @@ def enrol_student():
         return redirect(url_for("operations.workspace"))
     year = (request.form.get("academic_year") or "").strip()
     semester = (request.form.get("semester") or "").strip()
-    if not year or not semester:
-        flash("Academic year and semester are required.", "error")
+    if not year or not semester or not unit_id:
+        flash("Academic year, semester and linked academic unit are required to determine examination eligibility.", "error")
         return redirect(url_for("operations.workspace"))
     connection = db()
     student = connection.execute("""
@@ -311,9 +311,9 @@ def create_session():
     exam = connection.execute("SELECT id FROM examinations WHERE id=?", (examination_id,)).fetchone()
     unit = connection.execute("SELECT id FROM academic_units WHERE id=? AND active=1", (unit_id,)).fetchone() if unit_id else None
     venue = connection.execute("SELECT capacity FROM venues WHERE id=? AND active=1", (venue_id,)).fetchone() if venue_id else None
-    if not exam or (unit_id and not unit) or (venue_id and not venue):
+    if not exam or not unit or (venue_id and not venue):
         connection.close()
-        flash("Select an existing examination, active unit and active venue.", "error")
+        flash("Select an existing examination, active academic unit and active venue.", "error")
         return redirect(url_for("operations.workspace"))
     try:
         cursor = connection.execute("""
@@ -324,6 +324,18 @@ def create_session():
         """, (code, examination_id, unit_id, year[:20], semester[:40], venue_id,
               session_date.isoformat(), start.strftime("%H:%M"), end.strftime("%H:%M"), session.get("user_id")))
         session_id = cursor.lastrowid
+        if venue_id:
+            venue_conflict = connection.execute("""
+                SELECT 1 FROM examination_sessions
+                WHERE venue_id=? AND session_date=? AND status!='cancelled'
+                  AND start_time < ? AND end_time > ? AND id!=?
+            """, (venue_id, session_date.isoformat(), end.strftime("%H:%M"),
+                  start.strftime("%H:%M"), session_id)).fetchone()
+            if venue_conflict:
+                connection.rollback()
+                connection.close()
+                flash("The selected venue is already booked during this time.", "error")
+                return redirect(url_for("operations.workspace"))
         # Candidate list is derived from actual active student enrolments, not a demo list.
         if unit_id:
             candidates = connection.execute("""
@@ -339,7 +351,7 @@ def create_session():
                     INSERT INTO session_candidates(session_id, student_id, eligibility_status, seat_label)
                     VALUES (?, ?, 'eligible', ?)
                 """, (session_id, candidate["student_id"], f"SEAT-{seat_number:03d}"))
-        candidate_count = len(candidates) if unit_id else 0
+        candidate_count = len(candidates)
         if venue and candidate_count > venue["capacity"]:
             connection.rollback()
             connection.close()
@@ -367,6 +379,22 @@ def assign_invigilator(session_id):
         flash("Choose a valid invigilator.", "error")
         return redirect(url_for("operations.workspace"))
     connection = db()
+    invigilator = connection.execute("SELECT id FROM invigilators WHERE id=? AND status='active'", (invigilator_id,)).fetchone()
+    target = connection.execute("SELECT session_date, start_time, end_time FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
+    if not invigilator or not target:
+        connection.close()
+        flash("Choose an active invigilator and a valid session.", "error")
+        return redirect(url_for("operations.workspace"))
+    overlap = connection.execute("""
+        SELECT 1 FROM session_invigilators si
+        JOIN examination_sessions es ON es.id=si.session_id
+        WHERE si.invigilator_id=? AND es.session_date=? AND es.status!='cancelled'
+          AND es.start_time < ? AND es.end_time > ?
+    """, (invigilator_id, target["session_date"], target["end_time"], target["start_time"])).fetchone()
+    if overlap:
+        connection.close()
+        flash("This invigilator is already assigned to an overlapping examination session.", "error")
+        return redirect(url_for("operations.workspace"))
     try:
         cursor = connection.execute("""
             INSERT INTO session_invigilators(session_id, invigilator_id) VALUES (?, ?)
