@@ -652,8 +652,10 @@ def report_session_incident(session_id, student_id):
     incident_id = cursor.lastrowid
     connection.execute("INSERT INTO incident_session_links(incident_id, session_id) VALUES (?, ?)",
                        (incident_id, session_id))
-    connection.execute("INSERT OR IGNORE INTO incident_case_workflow(incident_id, case_status) VALUES (?, 'reported')",
-                       (incident_id,))
+    connection.execute("""
+        INSERT OR IGNORE INTO incident_case_workflow(incident_id, case_status, reported_by)
+        VALUES (?, 'reported', ?)
+    """, (incident_id, session.get("user_id")))
     _audit(connection, "report_incident", "incident", incident_id,
            f"Incident report linked to examination session {session_row['session_code']}.")
     connection.commit()
