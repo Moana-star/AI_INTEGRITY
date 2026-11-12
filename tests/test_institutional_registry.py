@@ -57,6 +57,25 @@ class InstitutionalRegistryTests(unittest.TestCase):
         self.assertIn("examination_attendance", tables)
         self.assertIn("audit_events", tables)
 
+    def test_academic_history_is_append_only(self):
+        connection = registry.get_connection()
+        connection.execute("INSERT INTO users(id) VALUES(1)")
+        connection.execute("""
+            INSERT INTO students(student_number,first_name,last_name,course)
+            VALUES('HIST/001','Amina','Otieno','Computer Science')
+        """)
+        connection.execute("""
+            INSERT INTO academic_history_events
+                (student_id,event_type,effective_date,reason,recorded_by)
+            VALUES(1,'progression','2026-09-01','Approved progression decision',1)
+        """)
+        connection.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("UPDATE academic_history_events SET reason='changed' WHERE id=1")
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("DELETE FROM academic_history_events WHERE id=1")
+        connection.close()
+
     def test_student_values_normalize_and_validate(self):
         values = registry._student_values({
             "admission_number": " REG/002 ",
