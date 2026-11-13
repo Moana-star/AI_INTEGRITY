@@ -53,6 +53,22 @@ def validate_source(source_path: Path):
         missing = required - tables
         if missing:
             raise RuntimeError(f"Source database is missing required tables: {sorted(missing)}")
+        views = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='view' ORDER BY name"
+        ).fetchall()
+        if views:
+            raise RuntimeError(
+                "SQLite views are not copied automatically; create reviewed PostgreSQL view definitions first: "
+                + repr([row[0] for row in views])
+            )
+        virtual_tables = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE 'CREATE VIRTUAL TABLE%'"
+        ).fetchall()
+        if virtual_tables:
+            raise RuntimeError(
+                "SQLite virtual tables require a separately designed PostgreSQL equivalent: "
+                + repr([row[0] for row in virtual_tables])
+            )
         triggers = connection.execute(
             "SELECT name, tbl_name, sql FROM sqlite_master WHERE type='trigger' ORDER BY name"
         ).fetchall()
@@ -149,6 +165,10 @@ def reset_identity_sequences(connection, metadata: MetaData):
 def migrate(source_path: Path, database_url: str, apply: bool, confirm_empty: bool):
     source_tables, source_triggers = validate_source(source_path)
     source_engine = create_engine(f"sqlite:///{source_path.resolve().as_posix()}")
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql+psycopg://" + database_url[len("postgres://"):]
+    elif database_url.startswith("postgresql://"):
+        database_url = "postgresql+psycopg://" + database_url[len("postgresql://"):]
     target_engine = create_engine(database_url, pool_pre_ping=True)
 
     try:
