@@ -70,6 +70,14 @@ class SQLiteToPostgresMigrationPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "foreign_key_check"):
             validate_source(Path(self.path))
 
+    def test_preflight_rejects_views_that_have_no_reviewed_postgres_definition(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("CREATE VIEW student_numbers AS SELECT student_number FROM students")
+        connection.commit()
+        connection.close()
+        with self.assertRaisesRegex(RuntimeError, "SQLite views are not copied"):
+            validate_source(Path(self.path))
+
     def test_table_counts_reflect_all_requested_tables(self):
         engine = create_engine(f"sqlite:///{Path(self.path).resolve().as_posix()}")
         try:
