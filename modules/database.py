@@ -169,29 +169,39 @@ class PostgresConnection:
             r"BEGIN\s+SELECT\s+RAISE\(ABORT,\s*'(?P<message>[^']*)'\);\s*END\s*;",
             re.I | re.S,
         )
-        triggers = list(trigger_pattern.finditer(script))
-        remainder = trigger_pattern.sub("", script)
-        for match in triggers:
-            name, event, table, message = (
-                match.group("name"), match.group("event").upper(),
-                match.group("table"), match.group("message"),
-            )
-            function_name = f"eims_guard_{name}"
-            try:
-                self.raw.execute(
-                    f"CREATE OR REPLACE FUNCTION {function_name}() RETURNS trigger "
-                    f"LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION '{message.replace(chr(39), chr(39)*2)}'; END; $$"
-                )
-                self.raw.execute(f"DROP TRIGGER IF EXISTS {name} ON {table}")
-                self.raw.execute(
-                    f"CREATE TRIGGER {name} BEFORE {event} ON {table} "
-                    f"FOR EACH ROW EXECUTE FUNCTION {function_name}()"
-                )
-            except Exception as error:
-                self.raise_compatible_error(error)
-        statements = [part.strip() for part in remainder.split(";") if part.strip()]
-        for statement in statements:
-            self.execute(statement)
+        token_pattern = re.compile(
+            r"(?P<trigger>CREATE\s+TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?\w+"
+            r".*?BEGIN\s+SELECT\s+RAISE\(ABORT,\s*'[^']*'\);\s*END\s*;)"
+            r"|(?P<statement>[^;]+;)",
+            re.I | re.S,
+        )
+        for token in token_pattern.finditer(script):
+            trigger_sql = token.group("trigger")
+            if trigger_sql:
+                match = trigger_pattern.fullmatch(trigger_sql.strip())
+                if not match:
+                    raise RuntimeError("Unsupported SQLite trigger definition; add an explicit PostgreSQL migration.")
+                name = match.group("name")
+                event = match.group("event").upper()
+                table = match.group("table")
+                message = match.group("message").replace("'", "''")
+                function_name = f"eims_guard_{name}"
+                try:
+                    self.raw.execute(
+                        f"CREATE OR REPLACE FUNCTION {function_name}() RETURNS trigger "
+                        f"LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION '{message}'; END; $$"
+                    )
+                    self.raw.execute(f"DROP TRIGGER IF EXISTS {name} ON {table}")
+                    self.raw.execute(
+                        f"CREATE TRIGGER {name} BEFORE {event} ON {table} "
+                        f"FOR EACH ROW EXECUTE FUNCTION {function_name}()"
+                    )
+                except Exception as error:
+                    self.raise_compatible_error(error)
+            else:
+                statement = token.group("statement").strip().rstrip(";").strip()
+                if statement:
+                    self.execute(statement)
         return None
 
     def commit(self):
