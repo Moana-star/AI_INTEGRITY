@@ -874,28 +874,9 @@ def admin_settings():
 def invigilator_dashboard():
     if not invigilator_required():
         return redirect(url_for("login"))
-
-    connection = get_db_connection()
-
-    invigilator = connection.execute(
-        "SELECT * FROM invigilators WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
-
-    assigned_exams = []
-    if invigilator is not None:
-        assigned_exams = connection.execute("""
-        SELECT * FROM examinations
-            WHERE invigilator_id = ?
-            ORDER BY examination_date, start_time
-        """, (invigilator["id"],)).fetchall()
-
-    connection.close()
-
-    return render_template(
-        "invigilator_dashboard.html",
-        invigilator=invigilator,
-        assigned_exams=assigned_exams
-    )
+    # The session register is authoritative. Do not expose legacy master-row
+    # schedule fields as if they were actual invigilator assignments.
+    return redirect(url_for("operations.workspace"))
 
 
 if __name__ == "__main__":
