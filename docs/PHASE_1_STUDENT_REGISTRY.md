@@ -32,6 +32,7 @@ Admission number is the unique student identifier. EIMS does not infer an instit
 - Each imported student and the import operation receive audit events.
 - The import page displays a row-by-row validation report.
 - A consolidated read-only student record view displays profile information and unit-enrolment history.
+- Legacy `/admin/students` list/create/edit URLs now redirect to the authoritative Institutional Registry; legacy direct student deletion is disabled so records are managed through governed academic-status/history workflows.
 - A guarded SQLite cleanup utility targets only the three explicitly identified demonstration admission numbers. It defaults to dry-run, creates a timestamped backup before applying changes, requires an existing administrator actor, preserves existing audit history, removes only profile/unit-enrolment child rows, and refuses to proceed if any other declared foreign-key dependency exists.
 - No automatic demo-student seeding was found in the inspected application startup path; the three displayed records are stored in the local database and require the controlled cleanup below.
 
@@ -76,6 +77,7 @@ The script creates a timestamped backup before writing. It refuses the entire op
 12. Complete institutional data-owner review before loading real student records.
 13. Run the demonstration cleanup in dry-run mode, review all dependencies, apply it against the intended local database, and verify only the three named records were removed.
 14. Verify student create/edit/search/import workflows manually in the running application and confirm current CI is green.
+15. Verify legacy student URLs redirect to the registry and direct deletion is disabled.
 
 ## Operational safety
 
