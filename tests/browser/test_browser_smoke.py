@@ -32,13 +32,13 @@ class BrowserSmokeTests(unittest.TestCase):
         self.page.wait_for_url("**/login")
         self.assertEqual(self.page.locator('meta[name="csrf-token"]').count(), 1)
         self.assertTrue(self.page.get_by_label("Username").is_visible())
-        self.assertTrue(self.page.get_by_label("Password").is_visible())
+        self.assertTrue(self.page.locator("#password").is_visible())
         self.assertTrue(self.page.get_by_label("Role").is_visible())
 
     def test_invalid_staff_login_shows_generic_error_without_authentication(self):
         self.page.goto(BASE_URL + "/login", wait_until="networkidle")
         self.page.get_by_label("Username").fill("not-a-real-account")
-        self.page.get_by_label("Password").fill("not-a-real-password")
+        self.page.locator("#password").fill("not-a-real-password")
         self.page.get_by_label("Role").select_option("admin")
         self.page.get_by_role("button", name="Sign in").click()
         self.page.get_by_role("alert").wait_for()
