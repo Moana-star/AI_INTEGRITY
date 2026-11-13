@@ -26,7 +26,11 @@ class ApprovedTestProvider:
 
 class BiometricAttendanceRouteTests(unittest.TestCase):
     def setUp(self):
-        self.original_config = {key: flask_app.config.get(key) for key in (\n            "TESTING", "SECRET_KEY", "WTF_CSRF_ENABLED", "BIOMETRIC_ENABLED",\n            "BIOMETRIC_INSTITUTIONAL_APPROVAL", "BIOMETRIC_PROVIDER"\n        )}\n        handle, self.path = tempfile.mkstemp(suffix=".sqlite3")
+        self.original_config = {key: flask_app.config.get(key) for key in (
+            "TESTING", "SECRET_KEY", "WTF_CSRF_ENABLED", "BIOMETRIC_ENABLED",
+            "BIOMETRIC_INSTITUTIONAL_APPROVAL", "BIOMETRIC_PROVIDER"
+        )}
+        handle, self.path = tempfile.mkstemp(suffix=".sqlite3")
         os.close(handle)
         connection = sqlite3.connect(self.path)
         connection.executescript("""
@@ -106,7 +110,11 @@ class BiometricAttendanceRouteTests(unittest.TestCase):
             item.stop()
         operations.SCHEMA_READY = False
         institutional_registry._schema_ready = False
-        for key, value in self.original_config.items():\n            if value is None:\n                flask_app.config.pop(key, None)\n            else:\n                flask_app.config[key] = value
+        for key, value in self.original_config.items():
+            if value is None:
+                flask_app.config.pop(key, None)
+            else:
+                flask_app.config[key] = value
         try:
             os.unlink(self.path)
         except FileNotFoundError:
