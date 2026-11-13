@@ -352,9 +352,8 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
                   (2,'HALL-B','Hall B',100,1)
         """)
         connection.execute("""
-            INSERT INTO invigilators(id,user_id,employee_number,first_name,last_name,status)
-            VALUES(1,1,'EMP-001','Alex','One','active'),
-                  (2,2,'EMP-002','Taylor','Two','active')
+            INSERT INTO invigilators(id,user_id,status)
+            VALUES(1,1,'active'),(2,2,'active')
         """)
         second_date = '2026-11-22' if (conflicting or candidate_conflicting) else '2026-11-21'
         second_start = '10:00' if (conflicting or candidate_conflicting) else '09:00'
