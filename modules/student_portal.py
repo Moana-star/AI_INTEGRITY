@@ -5,6 +5,7 @@ import os
 import secrets
 import sqlite3
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
+from modules.database import get_connection
 from werkzeug.security import check_password_hash, generate_password_hash
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.operations import ensure_schema as ensure_operations_schema
@@ -18,10 +19,7 @@ SCHEMA_READY = False
 
 
 def db():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def ensure_schema():
