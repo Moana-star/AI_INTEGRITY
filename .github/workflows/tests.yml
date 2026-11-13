@@ -58,8 +58,8 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Initialize isolated synthetic test database
         env:
-          DEMO_ADMIN_PASSWORD: ci-only-admin-password-not-used-for-login
-          DEMO_INVIGILATOR_PASSWORD: ci-only-invigilator-password-not-used-for-login
+          EIMS_BOOTSTRAP_ADMIN_USERNAME: ci-admin
+          EIMS_BOOTSTRAP_ADMIN_PASSWORD: ci-only-bootstrap-password-not-used-for-login-2026
         run: python database/database.py
       - name: Start Flask application
         env:
