@@ -99,7 +99,7 @@ These are targeted security improvements, not a substitute for the remaining con
 - The student/staff role model is not yet a complete institutional RBAC model.
 - CSRF validation and IP-based login rate limiting are enabled. Production must configure shared Redis-compatible rate-limit storage; account-level lockout and MFA remain outstanding.
 - Evidence files are private by path and access control, but encrypted storage, malware scanning and retention automation are not yet implemented.
-- The automated suite includes PostgreSQL data-migration integration, a PostgreSQL runtime schema-bootstrap job and a separate Chromium smoke-test job; these are not complete role-based E2E, accessibility, load or penetration coverage.
+- The automated suite includes PostgreSQL data-migration integration, a PostgreSQL runtime schema-bootstrap job and a separate Chromium smoke-test job; these are not complete role-based E2E, accessibility, load or penetration coverage. A non-root Docker image and PostgreSQL/Redis Compose configuration are also built/validated in CI. The PostgreSQL runtime suite covers empty-first bootstrap/idempotence, schema creation, student/unit writes, append-only history and biometric fail-closed behavior.
 - The biometric provider is not connected.
 - No university SIS integration or institutional deployment is configured.
 
