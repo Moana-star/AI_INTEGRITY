@@ -229,6 +229,41 @@ class ExaminationDefinitionManagementTests(unittest.TestCase):
         self.assertEqual(state, ("active", None))
         self.assertEqual([row[0] for row in events], ["archive", "restore"])
 
+    def test_archived_definition_is_not_available_for_new_session(self):
+        exam_id = self.add_exam()
+        connection = sqlite3.connect(self.path)
+        connection.execute(
+            "UPDATE examinations SET definition_status='archived' WHERE id=?",
+            (exam_id,),
+        )
+        connection.execute(
+            "INSERT INTO academic_units(unit_code, unit_name) VALUES ('CSC201', 'Data Structures')"
+        )
+        connection.commit()
+        connection.close()
+        self.sign_in()
+        response = self.client.post(
+            "/operations/sessions",
+            data={
+                "session_code": "CSC201-2026-S1",
+                "examination_id": str(exam_id),
+                "unit_id": "1",
+                "academic_year": "2026/2027",
+                "semester": "Semester 1",
+                "session_date": "2026-12-01",
+                "start_time": "09:00",
+                "end_time": "11:00",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        count = connection.execute(
+            "SELECT COUNT(*) FROM examination_sessions WHERE examination_id=?",
+            (exam_id,),
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(count, 0)
+
     def test_legacy_delete_endpoint_never_deletes_definition(self):
         exam_id = self.add_exam()
         self.sign_in(role="admin")
