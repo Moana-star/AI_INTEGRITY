@@ -54,8 +54,45 @@ class InstitutionalRegistryTests(unittest.TestCase):
         connection.close()
         self.assertEqual(student["student_number"], "REG/001")
         self.assertIn("student_profiles", tables)
-        self.assertIn("examination_attendance", tables)
+        self.assertNotIn("examination_attendance", tables)
         self.assertIn("audit_events", tables)
+
+    def test_existing_legacy_attendance_rows_are_preserved_without_new_writes(self):
+        connection = sqlite3.connect(self.database_path)
+        connection.executescript("""
+            CREATE TABLE examination_attendance (
+                id INTEGER PRIMARY KEY,
+                examination_id INTEGER NOT NULL,
+                student_id INTEGER NOT NULL,
+                attendance_status TEXT NOT NULL,
+                verification_method TEXT NOT NULL,
+                verification_status TEXT NOT NULL,
+                check_in_at TEXT,
+                check_out_at TEXT,
+                invigilator_id INTEGER,
+                device_identifier TEXT,
+                override_reason TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            );
+            INSERT INTO examination_attendance
+                (id, examination_id, student_id, attendance_status,
+                 verification_method, verification_status)
+            VALUES (41, 7, 12, 'present', 'manual', 'verified');
+        """)
+        connection.commit()
+        connection.close()
+
+        registry.ensure_schema()
+
+        connection = sqlite3.connect(self.database_path)
+        row = connection.execute("""
+            SELECT id, examination_id, student_id, attendance_status,
+                   verification_method, verification_status
+            FROM examination_attendance WHERE id=41
+        """).fetchone()
+        connection.close()
+        self.assertEqual(row, (41, 7, 12, "present", "manual", "verified"))
 
     def test_academic_history_is_append_only(self):
         connection = registry.get_connection()
