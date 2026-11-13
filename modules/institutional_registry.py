@@ -219,6 +219,38 @@ def students():
     return render_template("student_registry.html", students=records, query=query)
 
 
+@registry_bp.get("/students/<int:student_id>")
+def student_detail(student_id):
+    """Read-only consolidated view of the student record and unit history."""
+    connection = get_connection()
+    student = connection.execute("""
+        SELECT s.*, p.faculty, p.department, p.institutional_email, p.phone,
+               COALESCE(p.academic_status, 'active') AS academic_status,
+               p.academic_year, p.semester, p.updated_at AS profile_updated_at
+        FROM students s LEFT JOIN student_profiles p ON p.student_id=s.id
+        WHERE s.id=?
+    """, (student_id,)).fetchone()
+    if student is None:
+        connection.close()
+        from flask import abort
+        abort(404)
+    enrolments = connection.execute("""
+        SELECT e.id, e.academic_year, e.semester, e.enrolment_status,
+               e.created_at, u.unit_code, u.unit_name, u.department, u.faculty
+        FROM student_unit_enrolments e
+        JOIN academic_units u ON u.id=e.unit_id
+        WHERE e.student_id=?
+        ORDER BY e.academic_year DESC, e.semester DESC, u.unit_code
+    """, (student_id,)).fetchall()
+    history_count = connection.execute(
+        "SELECT COUNT(*) FROM academic_history_events WHERE student_id=?",
+        (student_id,),
+    ).fetchone()[0]
+    connection.close()
+    return render_template("student_record.html", student=student,
+                           enrolments=enrolments, history_count=history_count)
+
+
 @registry_bp.route("/students/new", methods=["GET", "POST"])
 def new_student():
     if request.method == "POST":
