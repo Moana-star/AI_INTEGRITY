@@ -62,6 +62,8 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
 
     def _seed_two_student_portal_records(self):
         connection = sqlite3.connect(self.path)
+        connection.execute("ALTER TABLE examinations ADD COLUMN course_code TEXT")
+        connection.execute("ALTER TABLE examinations ADD COLUMN examination_name TEXT")
         connection.executemany("""
             INSERT INTO students(id,student_number,first_name,last_name)
             VALUES(?,?,?,?)
