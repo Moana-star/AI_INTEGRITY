@@ -353,12 +353,12 @@ def create_policy():
         return redirect(url_for("eligibility.workspace"))
     connection = db()
     try:
-        connection.execute("""
+        inserted_policy = connection.execute("""
             INSERT INTO eligibility_policies
                 (policy_code,version,effective_from,source_reference,rules_json,created_by)
             VALUES (?,?,?,?,?,?)
         """, (code,version,effective_from,reason,json.dumps(rules),session["user_id"]))
-        policy_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        policy_id = inserted_policy.lastrowid
         connection.execute("""INSERT INTO audit_events
             (actor_user_id,action,entity_type,entity_id,summary)
             VALUES (?,'create','eligibility_policy',?,'Created an eligibility policy draft requiring independent approval.')""",
