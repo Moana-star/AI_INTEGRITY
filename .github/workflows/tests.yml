@@ -89,4 +89,4 @@ jobs:
         run: python -m unittest discover -s tests/browser -v
       - name: Print server log on failure
         if: failure()
-        run: cat /tmp/eims-browser.log
+        run: test ! -f /tmp/eims-browser.log || cat /tmp/eims-browser.log
