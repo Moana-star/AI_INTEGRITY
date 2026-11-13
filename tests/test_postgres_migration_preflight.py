@@ -78,6 +78,14 @@ class SQLiteToPostgresMigrationPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "SQLite views are not copied"):
             validate_source(Path(self.path))
 
+    def test_preflight_rejects_partial_indexes_without_reviewed_equivalent(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("CREATE INDEX partial_student_index ON students(student_number) WHERE student_number <> ''")
+        connection.commit()
+        connection.close()
+        with self.assertRaisesRegex(RuntimeError, "Partial or expression indexes"):
+            validate_source(Path(self.path))
+
     def test_table_counts_reflect_all_requested_tables(self):
         engine = create_engine(f"sqlite:///{Path(self.path).resolve().as_posix()}")
         try:
