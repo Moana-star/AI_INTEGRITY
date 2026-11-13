@@ -333,7 +333,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         connection.close()
 
 
-    def _seed_schedule_fixture(self, conflicting=False):
+    def _seed_schedule_fixture(self, conflicting=False, candidate_conflicting=False):
         connection = sqlite3.connect(self.path)
         connection.execute("INSERT INTO users(id) VALUES(1),(2)")
         connection.execute("""
@@ -356,9 +356,9 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
             VALUES(1,1,'EMP-001','Alex','One','active'),
                   (2,2,'EMP-002','Taylor','Two','active')
         """)
-        second_date = '2026-11-22' if conflicting else '2026-11-21'
-        second_start = '10:00' if conflicting else '09:00'
-        second_end = '12:00' if conflicting else '11:00'
+        second_date = '2026-11-22' if (conflicting or candidate_conflicting) else '2026-11-21'
+        second_start = '10:00' if (conflicting or candidate_conflicting) else '09:00'
+        second_end = '12:00' if (conflicting or candidate_conflicting) else '11:00'
         connection.execute("""
             INSERT INTO examination_sessions
             (id,session_code,examination_id,academic_year,semester,venue_id,
@@ -371,6 +371,8 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
             INSERT INTO session_candidates(session_id,student_id,eligibility_status)
             VALUES(1,1,'pending'),(2,2,'pending')
         """)
+        if candidate_conflicting:
+            connection.execute("INSERT INTO session_candidates(session_id,student_id,eligibility_status) VALUES(2,1,'pending')")
         connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(1,1)")
         if conflicting:
             connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(2,1)")
@@ -575,6 +577,57 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
             )
         connection.rollback()
         connection.close()
+
+
+    def test_reschedule_rejects_candidate_overlap(self):
+        client = self._seed_schedule_fixture(candidate_conflicting=True)
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "10:00",
+            "end_time": "12:00",
+            "venue_id": "",
+            "reason": "Candidate timetable conflict requires another sitting.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute(
+            "SELECT session_date,start_time,end_time,venue_id FROM examination_sessions WHERE id=1"
+        ).fetchone()
+        history_count = connection.execute(
+            "SELECT COUNT(*) FROM examination_session_schedule_history WHERE session_id=1"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(current, ("2026-11-20","09:00","11:00",1))
+        self.assertEqual(history_count, 0)
+
+    def test_reschedule_is_blocked_after_attendance_is_recorded(self):
+        client = self._seed_schedule_fixture()
+        connection = sqlite3.connect(self.path)
+        connection.execute("""
+            INSERT INTO attendance_events
+                (session_id,student_id,event_type,verification_method,verification_status,recorded_by)
+            VALUES(1,1,'check_in','manual','verified',1)
+        """)
+        connection.commit()
+        connection.close()
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "12:00",
+            "end_time": "14:00",
+            "venue_id": "2",
+            "reason": "An attendance record must not be detached from its sitting.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute(
+            "SELECT session_date,start_time,end_time,venue_id FROM examination_sessions WHERE id=1"
+        ).fetchone()
+        history_count = connection.execute(
+            "SELECT COUNT(*) FROM examination_session_schedule_history WHERE session_id=1"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(current, ("2026-11-20","09:00","11:00",1))
+        self.assertEqual(history_count, 0)
 
 
 if __name__ == "__main__":
