@@ -122,6 +122,26 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         finally:
             flask_app.config["WTF_CSRF_ENABLED"] = previous_csrf
 
+    def test_registrar_cannot_report_incidents_from_exam_session_workspace(self):
+        previous_csrf = flask_app.config.get("WTF_CSRF_ENABLED", True)
+        try:
+            flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret", WTF_CSRF_ENABLED=False)
+            client = flask_app.test_client()
+            with client.session_transaction() as browser_session:
+                browser_session["user_id"] = 1
+                browser_session["role"] = "registrar"
+            response = client.post(
+                "/operations/sessions/1/candidates/1/incidents",
+                data={
+                    "incident_type": "Unauthorized registrar report",
+                    "description": "This request must be denied before it can create an incident.",
+                    "severity": "low",
+                },
+            )
+            self.assertEqual(response.status_code, 403)
+        finally:
+            flask_app.config["WTF_CSRF_ENABLED"] = previous_csrf
+
     def test_invigilator_cannot_export_attendance_csv(self):
         flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
         client = flask_app.test_client()
