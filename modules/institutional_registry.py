@@ -12,6 +12,7 @@ import os
 import re
 import sqlite3
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from modules.database import get_connection as open_database_connection
 
 registry_bp = Blueprint("registry", __name__, url_prefix="/admin/registry")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -24,10 +25,7 @@ CSV_FIELDS = {
 
 
 def get_connection():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return open_database_connection(DATABASE)
 
 
 _schema_ready = False
