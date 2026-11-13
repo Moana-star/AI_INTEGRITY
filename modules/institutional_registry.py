@@ -287,43 +287,38 @@ def import_students():
     if request.method == "GET":
         return render_template("student_registry_import.html")
     upload = request.files.get("file")
-    if not upload or not upload.filename.lower().endswith(".csv"):
+    if not upload or not upload.filename or not upload.filename.lower().endswith(".csv"):
         return render_template("student_registry_import.html", error="Choose a CSV file.")
     raw = upload.read(2_000_001)
     if len(raw) > 2_000_000:
         return render_template("student_registry_import.html", error="CSV files must be 2 MB or smaller.")
+
+    connection = get_connection()
     try:
-        text = raw.decode("utf-8-sig")
-        reader = csv.DictReader(io.StringIO(text))
-        headers = {header.strip() for header in (reader.fieldnames or []) if header and header.strip()}
-        missing = CSV_FIELDS - headers
-        if missing:
-            return render_template("student_registry_import.html",
-                error="Missing CSV columns: " + ", ".join(sorted(missing)))
-        connection = get_connection()
-        imported = 0
-        rejected = 0
-        for row in reader:
-            connection.execute("SAVEPOINT student_import_row")
-            try:
-                normalized = {str(k).strip(): (v or "").strip() for k, v in row.items() if k}
-                values = _student_values(normalized)
-                _save_student(connection, values)
-                connection.execute("RELEASE SAVEPOINT student_import_row")
-                imported += 1
-            except (ValueError, sqlite3.IntegrityError):
-                connection.execute("ROLLBACK TO SAVEPOINT student_import_row")
-                connection.execute("RELEASE SAVEPOINT student_import_row")
-                rejected += 1
+        valid_rows, row_errors = _validate_student_csv(raw, connection)
+        if row_errors:
+            connection.rollback()
+            return render_template(
+                "student_registry_import.html",
+                error="No records were imported. Correct the reported rows and upload the complete file again.",
+                row_errors=row_errors,
+                valid_count=len(valid_rows),
+            )
+        for values in valid_rows:
+            student_id = _save_student(connection, values)
+            _record_audit(connection, "create", "student", student_id,
+                          "Student record created through the validated institutional CSV import.")
         _record_audit(connection, "import", "student_registry", None,
-                      f"CSV import processed: {imported} inserted; {rejected} skipped.")
+                      f"Validated CSV import completed: {len(valid_rows)} student record(s) created.")
         connection.commit()
-        connection.close()
-        flash(f"CSV import complete: {imported} record(s) imported; {rejected} row(s) skipped. Review the register before operational use.", "success")
+        flash(f"CSV import complete: {len(valid_rows)} student record(s) created. Review the register before operational use.", "success")
         return redirect(url_for("registry.students"))
-    except (UnicodeDecodeError, csv.Error):
+    except (ValueError, sqlite3.IntegrityError) as error:
+        connection.rollback()
         return render_template("student_registry_import.html",
-                               error="The file could not be read as a UTF-8 CSV. Export it as UTF-8 CSV and try again.")
+                               error=f"No records were imported. Import validation failed: {error}")
+    finally:
+        connection.close()
 
 
 HISTORY_EVENT_TYPES = {
