@@ -172,15 +172,15 @@ The repository contains:
 
 ### Attendance data-model decision
 
-The current canonical model is:
+The operational attendance model used by the current examination operations and biometric attendance paths is:
 
 - `session_attendance`: one current-state row per `(session_id, student_id)`, protected by a unique constraint. It holds the candidate's current attendance status, check-in/check-out timestamps, verification method/status, verifier and notes.
 - `attendance_events`: append-only event history for check-in/check-out actions, including verification method/status, actor and timestamp.
 - `biometric_verification_events`: separate provider verification attempts/outcomes; it is not the attendance ledger.
 
-The current operations and biometric attendance paths read/write `session_attendance` and append corresponding `attendance_events`. No `examination_attendance` table reference was found in the current operations module during this review.
+**Legacy-model finding:** `modules/institutional_registry.py` still creates an `examination_attendance` table, and `tests/test_institutional_registry.py` asserts that this table exists. The current operations and biometric attendance workflows reviewed use `session_attendance` and `attendance_events`; the legacy table is not the operational write path in those modules. Its presence means the repository still has a schema-level duplicate, even though current attendance workflows use the session-linked model.
 
-**Decision: retain `session_attendance` as the current attendance projection and `attendance_events` as the event ledger.** Do not add a third attendance store or perform a destructive rewrite. Existing legacy databases must be checked for any historical attendance table/data before a migration; preserve and reconcile records before retiring any legacy table. The database migration process must not silently discard or reinterpret historical attendance.
+**Decision for current workflows:** `session_attendance` is the canonical current-state projection and `attendance_events` is the event ledger. Do not introduce a third operational write path. **Legacy-table disposition remains open:** inspect every supported database for historical `examination_attendance` rows, reconcile any records against examination sessions/candidates, add an explicit migration and deprecation plan, and only then stop creating or retire the legacy table. Do not silently drop or reinterpret historical attendance.
 
 ### Security verification
 
@@ -189,3 +189,10 @@ The current operations and biometric attendance paths read/write `session_attend
 ### Phase 0 decision
 
 **Phase 0 is not fully closed.** Repository inspection, the attendance-model decision and current CI verification are recorded. Workstation installation, complete role/record authorization coverage and independent security verification remain open. No live university SIS, biometric provider or production credentials have been supplied. Keep PR #2 unmerged and keep `main` untouched until those gates are satisfied.
+
+
+## 12. Follow-up role/security verification
+
+The latest CI run for the documentation follow-up commit completed successfully: all four jobs passed (`test`, `browser-smoke`, `postgres-runtime`, `container-build`). The role permission unit tests were expanded with an explicit critical allow/deny matrix for all five institutional roles. See [Phase 0 Role and Security Verification Matrix](PHASE_0_ROLE_SECURITY_MATRIX.md) for the precise coverage and remaining object-scope gaps.
+
+The attendance-model review also found that the legacy `examination_attendance` table is still created by the registry schema and is asserted by a registry test. It is not the current operations/biometric write path, but its schema presence must be dealt with by a data-preserving migration before that table is removed or no longer created. Therefore the operational model choice is recorded, while legacy-table retirement is still pending.
