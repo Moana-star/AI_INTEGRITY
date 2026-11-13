@@ -1,14 +1,10 @@
 """
 database.py
 
-Creates the SQLite schema for the Examination Integrity Management System and seeds it
-with a small set of sample data so the app is demoable immediately.
-
-Run this file directly whenever you need to (re)build the database:
-    python database/database.py
-
-To provision demo logins in a new database, set DEMO_ADMIN_PASSWORD and
-DEMO_INVIGILATOR_PASSWORD in the environment before running this script.
+Creates the local SQLite schema for EIMS. Initialization is empty by default;
+synthetic records are inserted only with the explicit --demo option. The first
+administrator is provisioned from EIMS_BOOTSTRAP_ADMIN_USERNAME and
+EIMS_BOOTSTRAP_ADMIN_PASSWORD environment variables.
 """
 
 import argparse
