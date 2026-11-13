@@ -5,7 +5,7 @@ import unittest
 import threading
 from unittest.mock import patch
 
-from modules import institutional_registry, operations, integrity
+from modules import institutional_registry, operations, integrity, venue_management
 from app import app as flask_app
 
 
@@ -38,12 +38,14 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         self.integrity_patch.start()
         institutional_registry.ensure_schema()
         operations.ensure_schema()
+        venue_management.ensure_schema()
 
     def tearDown(self):
         self.registry_patch.stop()
         self.operations_patch.stop()
         self.integrity_patch.stop()
         operations.SCHEMA_READY = False
+        venue_management.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
         os.unlink(self.path)
 
@@ -632,6 +634,148 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         connection.close()
         self.assertEqual(current, ("2026-11-20","09:00","11:00",1))
         self.assertEqual(history_count, 0)
+
+
+    def test_capacity_change_is_audited_and_cannot_overbook_scheduled_sessions(self):
+        client = self._seed_schedule_fixture()
+        response = client.post("/venue-management/1/capacity", data={
+            "capacity": "50",
+            "reason": "Approved room capacity review reduced the usable seating count.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        self.assertEqual(connection.execute("SELECT capacity FROM venues WHERE id=1").fetchone()[0], 50)
+        history = connection.execute("""
+            SELECT action,old_capacity,new_capacity,reason,actor_user_id
+            FROM venue_operations_history WHERE venue_id=1
+        """).fetchone()
+        connection.close()
+        self.assertEqual(history[0:3], ("capacity_changed", 100, 50))
+        self.assertEqual(history[4], 1)
+
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO session_candidates(session_id,student_id,eligibility_status) VALUES(1,2,'pending')")
+        connection.commit()
+        connection.close()
+        blocked = client.post("/venue-management/1/capacity", data={
+            "capacity": "1",
+            "reason": "Attempted reduction below a booked candidate count.",
+        })
+        self.assertEqual(blocked.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        self.assertEqual(connection.execute("SELECT capacity FROM venues WHERE id=1").fetchone()[0], 50)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM venue_operations_history WHERE venue_id=1").fetchone()[0], 1)
+        connection.close()
+
+    def test_venue_cannot_close_while_scheduled_or_active_sessions_reserve_it(self):
+        client = self._seed_schedule_fixture()
+        blocked = client.post("/venue-management/1/status", data={
+            "active": "0",
+            "reason": "Room maintenance requires temporary closure.",
+        })
+        self.assertEqual(blocked.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        self.assertEqual(connection.execute("SELECT active FROM venues WHERE id=1").fetchone()[0], 1)
+        connection.execute("INSERT INTO venues(id,venue_code,room_name,capacity,active) VALUES(3,'HALL-C','Hall C',20,1)")
+        connection.commit()
+        connection.close()
+
+        closed = client.post("/venue-management/3/status", data={
+            "active": "0",
+            "reason": "Room maintenance requires temporary closure.",
+        })
+        self.assertEqual(closed.status_code, 302)
+        reopened = client.post("/venue-management/3/status", data={
+            "active": "1",
+            "reason": "Facilities inspection confirms the room is available again.",
+        })
+        self.assertEqual(reopened.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        self.assertEqual(connection.execute("SELECT active FROM venues WHERE id=3").fetchone()[0], 1)
+        actions = [row[0] for row in connection.execute(
+            "SELECT action FROM venue_operations_history WHERE venue_id=3 ORDER BY id"
+        )]
+        connection.close()
+        self.assertEqual(actions, ["closed", "reopened"])
+
+    def test_layout_versions_preserve_prior_seats_and_allocations(self):
+        client = self._seed_schedule_fixture()
+        first = client.post("/venue-management/1/layouts", data={
+            "rows": "10",
+            "seats_per_row": "10",
+            "accessible_seats": "A-01",
+            "reason": "Initial approved room seating plan for this venue.",
+        })
+        self.assertEqual(first.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        connection.row_factory = sqlite3.Row
+        old_seat = connection.execute("""
+            SELECT id,layout_version_id,display_label FROM venue_seats
+            WHERE venue_id=1 AND active=1 ORDER BY id LIMIT 1
+        """).fetchone()
+        self.assertEqual(old_seat["layout_version_id"], 1)
+        connection.execute("""
+            INSERT INTO session_seat_assignments
+            (session_id,student_id,venue_seat_id,extra_time_minutes,assigned_by,layout_version_id)
+            VALUES(1,1,?,0,1,?)
+        """, (old_seat["id"], old_seat["layout_version_id"]))
+        connection.commit()
+        connection.close()
+
+        second = client.post("/venue-management/1/layouts", data={
+            "rows": "10",
+            "seats_per_row": "10",
+            "accessible_seats": "A-01,A-02",
+            "reason": "Approved seating revision adds accessible seating options.",
+        })
+        self.assertEqual(second.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        versions = connection.execute("""
+            SELECT version_number FROM venue_layout_versions
+            WHERE venue_id=1 ORDER BY version_number
+        """).fetchall()
+        assignment = connection.execute("""
+            SELECT venue_seat_id,layout_version_id FROM session_seat_assignments
+            WHERE session_id=1 AND student_id=1
+        """).fetchone()
+        current = connection.execute("SELECT current_layout_version_id FROM venues WHERE id=1").fetchone()[0]
+        old_active = connection.execute("SELECT active FROM venue_seats WHERE id=?", (old_seat["id"],)).fetchone()[0]
+        new_labels = connection.execute("""
+            SELECT display_label,seat_label FROM venue_seats
+            WHERE venue_id=1 AND layout_version_id=2 AND active=1
+            ORDER BY row_label,seat_number LIMIT 2
+        """).fetchall()
+        connection.close()
+        self.assertEqual([row[0] for row in versions], [1, 2])
+        self.assertEqual(assignment, (old_seat["id"], 1))
+        self.assertEqual(current, 2)
+        self.assertEqual(old_active, 0)
+        self.assertEqual([row[0] for row in new_labels], ["A-01", "A-02"])
+        self.assertNotEqual(new_labels[0][1], old_seat["display_label"])
+
+    def test_venue_history_and_layout_versions_are_append_only(self):
+        client = self._seed_schedule_fixture()
+        response = client.post("/venue-management/1/layouts", data={
+            "rows": "10",
+            "seats_per_row": "10",
+            "accessible_seats": "",
+            "reason": "Initial approved room seating plan for this venue.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("UPDATE venue_layout_versions SET reason='rewritten' WHERE venue_id=1")
+        connection.rollback()
+        connection.execute("""
+            INSERT INTO venue_operations_history
+            (venue_id,action,reason,actor_user_id) VALUES(1,'closed','Test history immutability check.',1)
+        """)
+        connection.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("DELETE FROM venue_operations_history WHERE venue_id=1")
+        connection.rollback()
+        connection.close()
+
 
 
 if __name__ == "__main__":
