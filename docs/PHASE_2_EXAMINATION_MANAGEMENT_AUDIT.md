@@ -114,3 +114,54 @@ Phase 2 is not complete until all of the following are demonstrated:
 - Development and automated tests use synthetic data only. Never commit real student or staff records.
 - Do not enable biometric processing as part of Phase 2. Identity/biometric verification is a separately gated workstream.
 - Do not merge this branch into the parent branch or `main` until its review and acceptance gates pass.
+
+
+## 7. Implemented examination-definition management increment
+
+**Implementation status:** Completed on the Phase 2 branch.  
+**Verified commit:** `9235d2296fe0ef188f9aeaac89bcd9410df85c5e`
+
+Implemented:
+
+- Dedicated examination-definition register and create/edit forms.
+- Server-side validation for examination code and name, including duplicate detection.
+- Administrator and examination-officer access through the existing `exams.write` permission; registrar, invigilator and student roles are denied.
+- Additive lifecycle metadata on existing examination master records: active/archived status, creator, update time, archive actor/time and archive reason.
+- Scheduled sitting details remain in `examination_sessions`; the definition form does not accept dates, times, venues, candidates or invigilator assignments.
+- Archived definitions are excluded from new session selection and rejected by the session-creation endpoint.
+- Archival requires a reason and is blocked while scheduled or active sessions still reference the definition.
+- Restore requires a reason. Archive/restore preserve the original examination ID and all session, attendance and incident references.
+- Physical deletion through the old URL is disabled.
+- Create, edit, archive and restore actions write attributable `audit_events`.
+- Administrator dashboard and examination summary reports now derive schedule/status information from actual examination sessions, not master definitions.
+- The legacy invigilator dashboard redirects to the authoritative assigned-session workspace.
+- Phase 2 branch was added to GitHub Actions push and pull-request triggers.
+
+### Automated verification
+
+At commit `9235d22`:
+
+- Python unit suite: **136 tests passed, 0 failures, 0 errors; 1 environment-dependent skip**.
+- Chromium browser smoke suite: passed.
+- PostgreSQL runtime integration: passed.
+- Non-root container build: passed.
+- Docker Compose validation: passed.
+
+Run: [GitHub Actions — Phase 2 verification](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43422511428).
+
+### Compatibility note
+
+The original `examinations` table has legacy NOT NULL schedule columns. To avoid a destructive rebuild while keeping existing foreign-key identities intact, newly created definition-only rows receive inert compatibility values in those legacy columns. They are not shown as actual sittings; all real dates, times, venues, candidates and assignments are managed through `examination_sessions`. A separately reviewed schema migration should remove those legacy requirements before production.
+
+## 8. Remaining Phase 2 closure gates
+
+The examination-definition increment above is implemented and CI-verified. The whole Phase 2 is **not yet production-accepted**. The remaining work from the audit is:
+
+1. Transaction/concurrency-safe reservations for competing venue, candidate and invigilator allocations.
+2. Audited rescheduling and cancellation reason/history workflows, including immutable completed-session handling.
+3. Controlled venue closure, capacity changes, seat-layout versioning and reasoned seat overrides.
+4. Institution-approved scheduling buffers, invigilator qualifications/ratios and chief-invigilator rules.
+5. Browser-level acceptance of authenticated examination-officer workflows using institution-authorized data and manual review of the real local database.
+6. A reviewed migration to retire the legacy schedule columns without losing existing examination, session or incident references.
+
+No production deployment, institutional data import, merge to `main`, or biometric activation is authorized by this implementation.
