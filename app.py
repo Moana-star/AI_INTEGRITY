@@ -14,10 +14,16 @@ from modules.appeals import appeals_bp
 from modules.identity_check import identity_bp
 from modules.biometric_attendance import biometric_attendance_bp
 from modules.access_control import (STAFF_ROLES, effective_user_role, ensure_role_schema, legacy_role_for)
+from modules.database import get_connection, is_postgres
 
 app = Flask(__name__)
 if os.environ.get("FLASK_ENV") == "production":
-    raise RuntimeError("Production startup is blocked: the application still uses SQLite directly. Complete and verify the PostgreSQL adapter and migration before production deployment.")
+    if not is_postgres():
+        raise RuntimeError("Production requires DATABASE_URL pointing to PostgreSQL; SQLite is local-development only.")
+    if not os.environ.get("FLASK_SECRET_KEY") or len(os.environ["FLASK_SECRET_KEY"]) < 32:
+        raise RuntimeError("Production requires a securely generated FLASK_SECRET_KEY of at least 32 characters.")
+    if not os.environ.get("RATELIMIT_STORAGE_URI", "").startswith(("redis://", "rediss://")):
+        raise RuntimeError("Production requires Redis-backed rate-limit storage; in-memory limits are not multi-worker safe.")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 CSRFProtect(app)
 rate_limit_storage = os.environ.get("RATELIMIT_STORAGE_URI")
@@ -68,10 +74,7 @@ def health_check():
 
 
 def get_db_connection():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def get_student_risk_records(connection):
