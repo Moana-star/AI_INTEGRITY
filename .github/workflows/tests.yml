@@ -90,3 +90,42 @@ jobs:
       - name: Print server log on failure
         if: failure()
         run: test ! -f /tmp/eims-browser.log || cat /tmp/eims-browser.log
+
+  postgres-runtime:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: eims_runtime_password
+          POSTGRES_DB: eims_runtime_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d eims_runtime_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      EIMS_POSTGRES_URL: postgresql+psycopg://postgres:eims_runtime_password@localhost:5432/eims_runtime_test
+      DATABASE_URL: postgresql+psycopg://postgres:eims_runtime_password@localhost:5432/eims_runtime_test
+      EIMS_BOOTSTRAP_ADMIN_USERNAME: ci-runtime-admin
+      EIMS_BOOTSTRAP_ADMIN_PASSWORD: ci-only-runtime-bootstrap-password-not-used-for-login-2026
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Initialize an empty institutional source database
+        run: python database/database.py
+      - name: Migrate the initialized schema and bootstrap administrator to PostgreSQL
+        run: python scripts/migrate_sqlite_to_postgres.py --apply --confirm-empty-target
+      - name: Exercise Flask runtime and module schema creation on PostgreSQL
+        run: python -m unittest tests.test_postgres_runtime_integration -v
