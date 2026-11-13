@@ -203,3 +203,19 @@ The attendance-model review also found that the legacy `examination_attendance` 
 The registry schema bootstrap no longer creates `examination_attendance` for new databases. A pre-existing table is deliberately not dropped, renamed, truncated or rewritten. Tests verify that clean bootstrap omits the table and that a pre-existing row survives a subsequent bootstrap unchanged.
 
 The operational model remains `session_attendance` plus append-only `attendance_events`. Physical retirement from an existing institutional database is still pending a database inventory, session mapping, restricted archive, row-count/checksum reconciliation, restore test and Registrar/data-owner approval. See [Legacy attendance table retirement procedure](ATTENDANCE_LEGACY_TABLE_RETIREMENT.md). Because legacy rows refer to an examination rather than a specific session, automatic migration could assign attendance to the wrong sitting; preserving them is safer until mapping is authorized.
+
+
+## 14. Repository-side Phase 0 closure work (13 November 2026)
+
+The latest branch-head CI run [43396130675](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43396130675) passed all four jobs: Python unit tests, browser smoke tests, PostgreSQL runtime checks and container build.
+
+Additional code/test changes:
+- Expanded the protected-blueprint authorization test to exercise every role excluded by each blueprint's role boundary across every registered route and supported HTTP method.
+- Added student record-isolation tests using two synthetic students: one student's portal must not disclose the other student's profile/incident, and one student cannot submit a response to another student's incident.
+- Added an invigilator assignment-scope test proving that an invigilator cannot write attendance for an unassigned session.
+- Fixed an authorization gap: the session incident-report endpoint now explicitly rejects registrar sessions; a regression test covers this.
+- New installations no longer create the deprecated `examination_attendance` table; existing rows remain untouched. A separately reviewed archive/removal migration is still gated on inspection of the institution's actual database and approved session mapping.
+
+The clean workstation installation and independent security assessment are not repository-verifiable. The exact Windows acceptance steps and external assessor scope are in [Phase 0 external acceptance package](PHASE_0_EXTERNAL_ACCEPTANCE.md). The route tests materially improve coverage but do not certify every endpoint's full object-level policy or replace an independent penetration test.
+
+**Phase 0 release status: NOT CLOSED.** Repository CI and selected authorization/data-isolation regressions pass; external workstation evidence, institutional legacy-data reconciliation and independent security sign-off remain required.
