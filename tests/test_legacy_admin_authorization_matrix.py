@@ -32,6 +32,9 @@ class LegacyAdminNamespaceAuthorizationTests(unittest.TestCase):
                 continue
             if rule.rule.startswith("/admin/registry"):
                 continue
+            # Examination definitions are a dedicated namespace shared with examination officers.
+            if rule.rule.startswith("/admin/examinations"):
+                continue
             if rule.endpoint == "static":
                 continue
             yield rule
