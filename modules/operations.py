@@ -883,6 +883,12 @@ def reschedule_session(session_id):
             connection.rollback()
             flash("Only scheduled sessions can be rescheduled. Active, completed and cancelled sessions require separate institutional review.", "error")
             return redirect(url_for("operations.workspace"))
+        if (target["session_date"], target["start_time"], target["end_time"], target["venue_id"]) == (
+            session_date.isoformat(), start.strftime("%H:%M"), end.strftime("%H:%M"), venue_id
+        ):
+            connection.rollback()
+            flash("Change at least one schedule field before submitting a reschedule.", "error")
+            return redirect(url_for("operations.workspace"))
         attendance = connection.execute("""
             SELECT 1 FROM attendance_events WHERE session_id=?
             UNION ALL
