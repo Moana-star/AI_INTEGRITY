@@ -4,6 +4,16 @@
 <header class="page-header"><div><p class="eyebrow">Institutional data onboarding</p><h1>Import Student Records</h1><p class="page-subtitle">Import an authorized UTF-8 CSV export from the university registry.</p></div></header>
 <section class="panel form-panel">
   {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  {% if valid_count is defined %}<p class="field-hint">{{ valid_count }} row(s) passed validation, but none were imported because the file contains errors.</p>{% endif %}
+  {% if row_errors %}
+  <section aria-labelledby="import-errors-heading">
+    <h2 id="import-errors-heading">Import validation report</h2>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>CSV row</th><th>Problem</th></tr></thead>
+      <tbody>{% for item in row_errors %}<tr><td>{{ item.row if item.row else 'File' }}</td><td>{{ item.message }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  {% endif %}
   <h2>Required CSV columns</h2>
   <p class="field-hint">Your CSV must contain these exact column headings:</p>
   <pre class="code-sample">admission_number,first_name,last_name,course,year_of_study,faculty,department,institutional_email,phone,academic_status,academic_year,semester</pre>
