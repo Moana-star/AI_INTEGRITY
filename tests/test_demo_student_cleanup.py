@@ -68,7 +68,7 @@ class DemoStudentCleanupTests(unittest.TestCase):
         return SimpleNamespace(database=str(self.database), apply=apply, actor_user_id=actor)
 
     def counts(self):
-        with sqlite3.connect(self.path) as connection:
+        with contextlib.closing(sqlite3.connect(self.path)) as connection:
             return (
                 connection.execute("SELECT COUNT(*) FROM students").fetchone()[0],
                 connection.execute("SELECT COUNT(*) FROM student_profiles").fetchone()[0],
@@ -86,7 +86,7 @@ class DemoStudentCleanupTests(unittest.TestCase):
             result = cleanup.run(self.args(apply=True))
         self.assertEqual(result, 0)
         self.assertEqual(self.counts(), (1, 0, 0))
-        with sqlite3.connect(self.path) as connection:
+        with contextlib.closing(sqlite3.connect(self.path)) as connection:
             remaining = connection.execute(
                 "SELECT student_number FROM students"
             ).fetchall()
@@ -99,7 +99,7 @@ class DemoStudentCleanupTests(unittest.TestCase):
         self.assertEqual(len(backups), 1)
 
     def test_operational_reference_blocks_entire_cleanup(self):
-        with sqlite3.connect(self.path) as connection:
+        with contextlib.closing(sqlite3.connect(self.path)) as connection:
             connection.execute("PRAGMA foreign_keys=ON")
             connection.executescript("""
                 CREATE TABLE incidents (
