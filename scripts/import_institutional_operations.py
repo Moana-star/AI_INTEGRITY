@@ -12,7 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-from modules.database import get_connection
+from modules.database import get_connection, is_postgres
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATABASE = ROOT / "database" / "exam_integrity.db"
@@ -41,12 +41,14 @@ def read_csv(path: str | None, required: set[str], label: str) -> list[dict[str,
         raise ValueError(f"{label}: file not found: {source}")
     with source.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
-        headers = reader.fieldnames or []
+        raw_headers = reader.fieldnames or []
+        headers = [h.strip() if h else h for h in raw_headers]
         if len(headers) != len(set(headers)):
             raise ValueError(f"{label}: duplicate column names are not allowed.")
-        missing = required - {h.strip() for h in headers if h}
+        missing = required - {h for h in headers if h}
         if missing:
             raise ValueError(f"{label}: missing columns: {', '.join(sorted(missing))}")
+        reader.fieldnames = headers
         rows = []
         for line, row in enumerate(reader, start=2):
             cleaned = {str(k).strip(): (v or "").strip() for k, v in row.items() if k}
@@ -120,20 +122,25 @@ def normalize_inputs(args):
     return units, venues, enrolments
 
 
-def table_is_available(connection, table: str) -> bool:
-    try:
-        connection.execute(f"SELECT 1 FROM {table} LIMIT 0")
-        return True
-    except Exception:
-        return False
+def available_tables(connection) -> set[str]:
+    if is_postgres():
+        rows = connection.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema()"
+        ).fetchall()
+        return {row["table_name"] for row in rows}
+    rows = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()
+    return {row["name"] for row in rows}
 
 
 def run(args) -> int:
     units, venues, enrolments = normalize_inputs(args)
     connection = get_connection(args.database)
     try:
+        tables = available_tables(connection)
         required_tables = ("academic_units", "venues", "student_unit_enrolments", "students", "student_profiles")
-        missing_tables = [table for table in required_tables if not table_is_available(connection, table)]
+        missing_tables = [table for table in required_tables if table not in tables]
         if missing_tables:
             raise ValueError(
                 "Database schema is not initialized. Start the application and open the Institutional Registry "
@@ -207,7 +214,7 @@ def run(args) -> int:
                     raise ValueError("Only an administrator or registrar may import units/enrolments.")
             if venues and role not in {"admin", "examination_officer"}:
                 raise ValueError("Only an administrator or examination officer may import venues.")
-            if not table_is_available(connection, "audit_events"):
+            if "audit_events" not in tables:
                 raise ValueError("audit_events table is missing; initialize the application schema first.")
 
         print("VALIDATION PASSED")
