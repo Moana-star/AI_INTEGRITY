@@ -180,8 +180,8 @@ def reset_identity_sequences(connection, metadata: MetaData):
         ).scalar_one_or_none()
         if maximum is not None:
             connection.execute(
-                text("SELECT setval(CAST(:sequence AS regclass), :value, true)"),
-                {"sequence": sequence, "value": maximum},
+                text("SELECT setval(CAST(:sequence AS regclass), :value, :called)"),
+                {"sequence": sequence, "value": max(maximum, 1), "called": maximum >= 1},
             )
 
 
