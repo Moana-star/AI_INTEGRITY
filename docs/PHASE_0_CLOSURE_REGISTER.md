@@ -2,9 +2,9 @@
 
 **Repository:** `Moana-star/AI_INTEGRITY`  
 **Working branch:** `feature/eims-institutional-completion`  
-**Latest reviewed change:** `da92c76a04c5076e19406c45a5e08998834e80ff`  
+**Latest reviewed change:** `5ed5e1b` (local acceptance evidence recorded after this commit)  
 **Review date:** 13 November 2026  
-**Disposition:** **All four GitHub CI jobs passed for the final code-fix commit; local post-fix full-suite rerun remains pending. Not production-approved.**
+**Disposition:** **Phase 0 repository engineering baseline closed; local full suite and four GitHub CI jobs passed. Not production-approved.**
 
 This register is the concise status authority for Phase 0. It distinguishes repository work that can be verified by code and tests from institutional and operational acceptance that requires the university, its data owners, infrastructure operators or an independent assessor.
 
@@ -41,7 +41,7 @@ On 13 November 2026 the user's full local suite ran 117 tests: 114 passed, one f
 
 The sole failure was a defective assertion in `test_existing_admin_account_is_listed_as_administrator_not_internal_slug`. The administrator account legitimately has both name and username `admin`; the old assertion rejected any table cell containing that text and therefore also rejected the Name and Username columns, despite the Role cell correctly displaying `Administrator`.
 
-The assertion was corrected to inspect the complete table row and verify its third cell is `Administrator`. The correction is committed at `da92c76a04c5076e19406c45a5e08998834e80ff`. The complete local suite must be rerun against this exact commit before local test acceptance is marked green.
+The assertion was corrected to inspect the complete table row and verify its third cell is `Administrator`. The correction is committed at `da92c76a04c5076e19406c45a5e08998834e80ff`. The user reran the complete suite after pulling commit `5ed5e1b`: `Ran 117 tests in 15.630s`, `OK (skipped=2)`. The corrected administrator-role test passed. The two skips are the local PostgreSQL integration/runtime tests, which require a local PostgreSQL service and `DATABASE_URL`; dedicated PostgreSQL CI coverage is recorded below.
 
 ## 3. Automated verification
 
@@ -52,7 +52,7 @@ The repository CI workflow runs four jobs:
 3. `postgres-runtime`: empty-first PostgreSQL bootstrap, repeat-bootstrap non-destructiveness and Flask/module runtime tests.
 4. `container-build`: non-root Docker build and Docker Compose configuration validation.
 
-GitHub Actions push run [43409416494](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43409416494) for commit `da92c76a04c5076e19406c45a5e08998834e80ff` completed with all four jobs successful: `test`, `browser-smoke`, `postgres-runtime` and `container-build`. The separate pull-request-triggered run was also initiated. Local skips do not replace the dedicated PostgreSQL CI jobs. The user must still rerun the complete suite locally against the corrected commit to close the workstation acceptance record.
+GitHub Actions push run [43409416494](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43409416494) for commit `da92c76a04c5076e19406c45a5e08998834e80ff` completed with all four jobs successful: `test`, `browser-smoke`, `postgres-runtime` and `container-build`. The separate pull-request-triggered run was also initiated. Local skips do not replace the dedicated PostgreSQL CI jobs. The user subsequently pulled commit `5ed5e1b` (which includes the assertion correction and this closure register) and confirmed the full local suite: 117 tests, 0 failures, 2 expected PostgreSQL-related skips. Local compilation also completed without errors.
 
 ## 4. Explicit non-completions and release gates
 
@@ -85,8 +85,8 @@ These items are not represented as completed merely because code scaffolding or 
 ## 6. Closure decision
 
 **Repository engineering baseline:** substantially implemented and documented.  
-**Final test closure:** all four GitHub CI jobs passed for `da92c76a04c5076e19406c45a5e08998834e80ff`; local full-suite rerun against the corrected commit remains pending.  
+**Final test closure:** local full suite passed (117 tests, 0 failures, 2 PostgreSQL-related skips) and all four GitHub CI jobs passed for the corrected code commit.  
 **Institutional pilot readiness:** not yet established; authoritative data, policy-owner approval, full authorization assessment and operational acceptance remain necessary.  
 **Production release:** not approved.
 
-Once the user confirms the post-fix local full suite is green, Phase 0 may be closed as an **engineering foundation/audit phase with explicit external release gates**. That closure must not be interpreted as approval to process live student records, activate biometric checks or deploy the system for official examinations.
+Phase 0 is **closed as an engineering foundation/audit phase with explicit external release gates**. This closure is limited to repository engineering and the recorded test/CI evidence. It is not approval to process live student records, activate biometric checks or deploy the system for official examinations.
