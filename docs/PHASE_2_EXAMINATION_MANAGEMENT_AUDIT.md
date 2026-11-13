@@ -157,11 +157,11 @@ The original `examinations` table has legacy NOT NULL schedule columns. To avoid
 
 The examination-definition increment above is implemented and CI-verified. The whole Phase 2 is **not yet production-accepted**. The remaining work from the audit is:
 
-1. Transaction/concurrency-safe reservations for competing venue, candidate and invigilator allocations.
-2. Audited rescheduling and cancellation reason/history workflows, including immutable completed-session handling.
+1. **Completed on the scheduling safety branch:** serialized venue, candidate and invigilator reservations, with SQLite and PostgreSQL concurrency tests.
+2. **Completed on the scheduling safety branch:** reasoned/audited rescheduling and cancellation history, immutable completed/cancelled sessions, and safeguards for sessions with attendance or seat allocations.
 3. Controlled venue closure, capacity changes, seat-layout versioning and reasoned seat overrides.
 4. Institution-approved scheduling buffers, invigilator qualifications/ratios and chief-invigilator rules.
-5. Browser-level acceptance of authenticated examination-officer workflows using institution-authorized data and manual review of the real local database.
+5. Browser-level acceptance of authenticated examination-officer scheduling workflows using institution-authorized data and manual review of the real local database.
 6. A reviewed migration to retire the legacy schedule columns without losing existing examination, session or incident references.
 
 No production deployment, institutional data import, merge to `main`, or biometric activation is authorized by this implementation.
@@ -170,7 +170,7 @@ No production deployment, institutional data import, merge to `main`, or biometr
 ## 9. Scheduling concurrency and rescheduling increment
 
 **Implementation branch:** `feature/eims-phase-2-scheduling-safety`  
-**Status:** Implemented in the branch; automated verification pending.
+**Status:** Implemented and CI-verified at commit `5014a35cdd5fdc4a6e846677ce2ace4b2083c9dc`.
 
 ### Reservation serialization
 
@@ -196,8 +196,18 @@ No production deployment, institutional data import, merge to `main`, or biometr
 
 - Added a SQLite two-connection serialization test.
 - Added a PostgreSQL two-connection row-lock serialization test in the PostgreSQL runtime integration suite.
-- Added route tests for successful rescheduling, venue/invigilator conflict rejection, invalid dates/reasons, completed-session immutability, cancellation reason enforcement, and append-only history.
+- Added route tests for successful rescheduling, venue/invigilator/candidate conflict rejection, invalid dates/reasons, completed-session immutability, attendance-safe rescheduling, cancellation reason enforcement, and append-only history.
 - CI is configured to run on this branch.
+
+### Verification at commit `5014a35`
+
+- Python unit suite: **146 tests passed, 0 failures, 0 errors; 1 environment-dependent skip**.
+- PostgreSQL runtime integration: **7 tests passed**, including a two-connection scheduler-lock test.
+- Chromium browser smoke: passed.
+- Non-root container build: passed.
+- Docker Compose validation: passed.
+
+Run: [GitHub Actions — scheduling safety verification](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43424915687).
 
 ### Remaining cautions
 
