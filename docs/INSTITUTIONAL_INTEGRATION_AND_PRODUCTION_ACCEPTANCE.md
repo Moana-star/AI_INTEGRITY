@@ -6,12 +6,12 @@ This is the intake checklist for completing the remaining EIMS work. It does not
 
 ## 1. PostgreSQL runtime conversion
 
-The SQLite-to-PostgreSQL utility has been tested against PostgreSQL 16. That verifies data copying only. The Flask runtime still contains SQLite-specific connections, schema initialization, triggers and SQL. Do not set a PostgreSQL URL in production or remove the SQLite production guard until all of the following pass.
+A shared psycopg runtime adapter now routes all application module connections to PostgreSQL when DATABASE_URL is set. The adapter handles the SQLite-compatible SQL patterns currently used by the modules and translates append-only trigger definitions. A dedicated PostgreSQL CI job initializes an empty institutional schema, migrates the bootstrap account and exercises module schema creation. This is an integration milestone, not yet a production certification. Do not enable production traffic until all of the following pass.
 
-- [ ] One shared connection/transaction layer is used by app.py and every module.
-- [ ] All runtime DDL is moved from request-time SQLite executescript calls into versioned, reviewed PostgreSQL migrations.
-- [ ] SQLite-only PRAGMA, sqlite_master, last_insert_rowid, lastrowid, INSERT OR IGNORE, trigger syntax and table-upgrade logic are removed or replaced with explicit PostgreSQL equivalents.
-- [ ] All application tests run against a disposable PostgreSQL database, not just SQLite.
+- [x] One shared connection/transaction layer is used by app.py and every module.
+- [ ] Runtime DDL is moved from request-time schema initialization into versioned, reviewed PostgreSQL migrations.
+- [ ] Remaining SQLite compatibility SQL is removed from business modules and replaced by explicit, versioned PostgreSQL migrations; adapter coverage must be exhaustively tested.
+- [ ] The complete application test suite runs against a disposable PostgreSQL database, not just schema-bootstrap smoke journeys.
 - [ ] Tests cover transactions, rollback, concurrent attendance check-in, seat allocation races, uniqueness and isolation.
 - [ ] Migration rehearsal includes a consistent source snapshot, row-count and key reconciliation, sequence validation, backup, rollback and restore.
 - [ ] Cutover is rehearsed on a sanitized copy of the institution-authorized dataset.
