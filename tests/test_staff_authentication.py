@@ -68,8 +68,13 @@ class StaffAuthenticationTests(unittest.TestCase):
             state["role"] = "admin"
         response = self.client.get("/admin/institutional-users")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"<td>Administrator</td>", response.data)
-        self.assertNotIn(b"<td>admin</td>", response.data)
+        # The account name and username are legitimately both "admin".
+        # Assert the complete row so the role cell, not the username cells,
+        # is checked against the human-readable label.
+        self.assertRegex(
+            response.data.decode("utf-8"),
+            r"<tr>\\s*<td>admin</td>\\s*<td>admin</td>\\s*<td>Administrator</td>\\s*</tr>",
+        )
 
     def test_registrar_account_can_sign_in_to_registry_workspace(self):
         connection = sqlite3.connect(self.path)
