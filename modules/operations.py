@@ -582,6 +582,7 @@ def configure_venue_layout():
         flash(str(error), "error")
         return redirect(url_for("operations.workspace"))
     connection = db()
+    _begin_scheduling_write(connection)
     venue = connection.execute("SELECT capacity FROM venues WHERE id=? AND active=1",(venue_id,)).fetchone()
     used = connection.execute("""
         SELECT 1 FROM session_seat_assignments a
@@ -589,6 +590,7 @@ def configure_venue_layout():
         WHERE s.venue_id=? LIMIT 1
     """,(venue_id,)).fetchone()
     if not venue or len(seats)>venue["capacity"] or used:
+        connection.rollback()
         connection.close()
         flash("The venue must be active, the layout cannot exceed its capacity, and an allocated layout cannot be replaced.", "error")
         return redirect(url_for("operations.workspace"))
@@ -652,15 +654,18 @@ def allocate_session_seats(session_id):
     if not _require_admin():
         abort(403)
     connection=db()
+    _begin_scheduling_write(connection)
     target=connection.execute("""
         SELECT id,venue_id,academic_year,semester,status
         FROM examination_sessions WHERE id=?
     """,(session_id,)).fetchone()
     if not target or not target["venue_id"] or target["status"] not in {"scheduled"}:
+        connection.rollback()
         connection.close()
         flash("Seat allocation requires a scheduled session with an assigned venue.", "error")
         return redirect(url_for("operations.workspace"))
     if connection.execute("SELECT 1 FROM session_seat_assignments WHERE session_id=? LIMIT 1",(session_id,)).fetchone():
+        connection.rollback()
         connection.close()
         flash("This session already has seat assignments. Use a formal rescheduling workflow rather than overwriting them.", "error")
         return redirect(url_for("operations.workspace"))
@@ -681,6 +686,7 @@ def allocate_session_seats(session_id):
     accessible_needed=sum(1 for item in candidates if item["requires_accessible_seat"])
     accessible_available=sum(1 for item in seats if item["accessible"])
     if len(seats)<len(candidates) or accessible_available<accessible_needed:
+        connection.rollback()
         connection.close()
         flash("Seat allocation blocked: configure enough active seats and accessible seats for approved accommodations.", "error")
         return redirect(url_for("operations.workspace"))
