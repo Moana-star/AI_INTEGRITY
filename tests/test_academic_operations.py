@@ -193,6 +193,59 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         self.assertEqual([row["student_number"] for row in context["students"]], ["KSU/ASSIGNED/001"])
         self.assertEqual([row["examination_name"] for row in context["exams"]], ["Assigned Examination"])
 
+    def test_invigilator_cannot_record_attendance_for_an_unassigned_session(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO users(id) VALUES(1)")
+        connection.executemany("""
+            INSERT INTO students(id,student_number,first_name,last_name)
+            VALUES(?,?,?,?)
+        """, [
+            (1, "KSU/ASSIGNED/001", "Assigned", "Candidate"),
+            (2, "KSU/OTHER/002", "Other", "Candidate"),
+        ])
+        connection.execute("INSERT INTO invigilators(id,user_id,status) VALUES(1,1,'active')")
+        connection.executemany("""
+            INSERT INTO examinations(id,course_code,examination_name)
+            VALUES(?,?,?)
+        """, [(1, "CSC101", "Assigned exam"), (2, "MAT101", "Unassigned exam")])
+        connection.executemany("""
+            INSERT INTO examination_sessions
+            (id,session_code,examination_id,academic_year,semester,session_date,start_time,end_time,status)
+            VALUES(?,?,?,'2026/2027','Semester 1','2026-11-20','09:00','11:00','active')
+        """, [(1, "ASSIGNED-SESSION", 1), (2, "OTHER-SESSION", 2)])
+        connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(1,1)")
+        connection.executemany("""
+            INSERT INTO session_candidates(session_id,student_id,eligibility_status)
+            VALUES(?,?,'eligible')
+        """, [(1,1),(2,2)])
+        connection.commit()
+        connection.close()
+
+        previous_csrf = flask_app.config.get("WTF_CSRF_ENABLED", True)
+        try:
+            flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret", WTF_CSRF_ENABLED=False)
+            client = flask_app.test_client()
+            with client.session_transaction() as browser_session:
+                browser_session["user_id"] = 1
+                browser_session["role"] = "invigilator"
+            response = client.post(
+                "/operations/sessions/2/attendance/2",
+                data={"event_type": "check_in", "verification_method": "manual"},
+            )
+            self.assertEqual(response.status_code, 302)
+            connection = sqlite3.connect(self.path)
+            attendance_count = connection.execute(
+                "SELECT COUNT(*) FROM session_attendance WHERE session_id=2 AND student_id=2"
+            ).fetchone()[0]
+            event_count = connection.execute(
+                "SELECT COUNT(*) FROM attendance_events WHERE session_id=2 AND student_id=2"
+            ).fetchone()[0]
+            connection.close()
+            self.assertEqual(attendance_count, 0)
+            self.assertEqual(event_count, 0)
+        finally:
+            flask_app.config["WTF_CSRF_ENABLED"] = previous_csrf
+
     def test_reconciliation_flags_missing_checkin_for_review_not_absence(self):
         connection = sqlite3.connect(self.path)
         connection.execute("INSERT INTO users(id) VALUES(1)")
