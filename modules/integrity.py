@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 import uuid
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, session, url_for
+from modules.database import get_connection
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 
 integrity_bp = Blueprint("integrity", __name__, url_prefix="/integrity")
@@ -21,10 +22,7 @@ CASE_STATUSES = {
 
 
 def db():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def ensure_schema():
