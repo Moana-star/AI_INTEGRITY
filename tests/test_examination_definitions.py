@@ -100,6 +100,12 @@ class ExaminationDefinitionManagementTests(unittest.TestCase):
         connection.close()
         return exam_id
 
+    def test_examination_officer_can_view_definition_register(self):
+        self.sign_in()
+        response = self.client.get("/admin/examinations")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Examination definitions", response.data)
+
     def test_examination_officer_can_create_definition_and_audit_it(self):
         self.sign_in()
         response = self.client.post(
