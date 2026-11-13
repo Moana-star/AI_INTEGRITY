@@ -131,6 +131,48 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         response = client.get("/operations/sessions/1/attendance.csv")
         self.assertEqual(response.status_code, 403)
 
+    def test_invigilator_workspace_only_discloses_assigned_candidates_and_sessions(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("ALTER TABLE examinations ADD COLUMN examination_date TEXT")
+        connection.execute("INSERT INTO users(id) VALUES(1)")
+        connection.execute("""
+            INSERT INTO students(id,student_number,first_name,last_name,course)
+            VALUES(1,'KSU/ASSIGNED/001','Assigned','Student','Computer Science'),
+                  (2,'KSU/OTHER/002','Other','Student','Mathematics')
+        """)
+        connection.execute("INSERT INTO invigilators(id,user_id,status) VALUES(1,1,'active')")
+        connection.execute("""
+            INSERT INTO examinations(id,course_code,examination_name,invigilator_id,examination_date)
+            VALUES(1,'CSC101','Assigned Examination',1,'2026-11-20'),
+                  (2,'MAT101','Other Examination',NULL,'2026-11-21')
+        """)
+        connection.execute("""
+            INSERT INTO examination_sessions
+            (id,session_code,examination_id,academic_year,semester,session_date,start_time,end_time)
+            VALUES(1,'ASSIGNED-SESSION',1,'2026/2027','Semester 1','2026-11-20','09:00','11:00'),
+                  (2,'UNASSIGNED-SESSION',2,'2026/2027','Semester 1','2026-11-21','09:00','11:00')
+        """)
+        connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(1,1)")
+        connection.execute("""
+            INSERT INTO session_candidates(session_id,student_id,eligibility_status)
+            VALUES(1,1,'eligible'),(2,2,'eligible')
+        """)
+        connection.commit()
+        connection.close()
+        operations.SCHEMA_READY = False
+        flask_app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
+        client = flask_app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["user_id"] = 1
+            browser_session["role"] = "invigilator"
+        response = client.get("/operations/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ASSIGNED-SESSION", response.data)
+        self.assertIn(b"Assigned Student", response.data)
+        self.assertNotIn(b"UNASSIGNED-SESSION", response.data)
+        self.assertNotIn(b"Other Student", response.data)
+        self.assertNotIn(b"Other Examination", response.data)
+
     def test_reconciliation_flags_missing_checkin_for_review_not_absence(self):
         connection = sqlite3.connect(self.path)
         connection.execute("INSERT INTO users(id) VALUES(1)")
