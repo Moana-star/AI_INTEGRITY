@@ -137,3 +137,12 @@ jobs:
         uses: actions/checkout@v4
       - name: Build non-root production container
         run: docker build --tag eims:ci .
+      - name: Validate Docker Compose configuration
+        env:
+          POSTGRES_DB: eims_ci
+          POSTGRES_USER: eims_ci
+          POSTGRES_PASSWORD: ci-only-compose-password
+          FLASK_SECRET_KEY: ci-only-compose-secret-key-long-enough-for-validation
+          EIMS_BOOTSTRAP_ADMIN_USERNAME: ci-admin
+          EIMS_BOOTSTRAP_ADMIN_PASSWORD: ci-only-compose-bootstrap-password
+        run: docker compose config --quiet
