@@ -231,8 +231,12 @@ def verify_exam_attendance(session_id, student_id):
             connection.commit()
             flash("Face verification was not confirmed. No attendance was recorded; use manual review.", "warning")
             return redirect(url_for("identity.session_identity",session_id=session_id))
-        now = datetime.now().isoformat(timespec="seconds")
-        attendance_status = "late" if now[11:16] > target["start_time"] else "present"
+        now_dt = datetime.now()
+        scheduled_start = datetime.fromisoformat(
+            f"{target['session_date']}T{target['start_time']}"
+        )
+        attendance_status = "late" if now_dt > scheduled_start else "present"
+        now = now_dt.isoformat(timespec="seconds")
         connection.execute("""
             INSERT INTO session_attendance
             (session_id,student_id,status,check_in_at,verification_method,
