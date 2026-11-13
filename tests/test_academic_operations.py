@@ -381,6 +381,11 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         connection.close()
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
+        previous_config = {
+            key: flask_app.config.get(key)
+            for key in ("TESTING", "SECRET_KEY", "WTF_CSRF_ENABLED")
+        }
+        self.addCleanup(lambda values=previous_config: flask_app.config.update(values))
         flask_app.config.update(
             TESTING=True,
             SECRET_KEY="scheduling-test-secret",
