@@ -180,6 +180,10 @@ def prepare():
     if not _require_admin():
         abort(403)
     if not SCHEMA_READY:
+        from modules.institutional_registry import ensure_schema as ensure_registry_schema
+        from modules.operations import ensure_schema as ensure_operations_schema
+        ensure_registry_schema()
+        ensure_operations_schema()
         ensure_schema()
         SCHEMA_READY = True
 
