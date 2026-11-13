@@ -85,3 +85,11 @@ SQLite-specific constructs found in the current source include:
 ## Current blockers
 
 No PostgreSQL service, database credentials, institutional deployment environment or data export has been supplied in this task. Therefore no PostgreSQL server migration or cutover has been executed. The production guard must remain in place. The inventory above is based on the current source tree and is the required migration worklist, not a claim of PostgreSQL support.
+
+## Migration utility added
+
+- `scripts/migrate_sqlite_to_postgres.py` performs a fail-closed, one-way copy from a fully initialized SQLite source to an empty PostgreSQL public schema.
+- It validates SQLite integrity and foreign keys, inventories every table and row count, refuses unknown SQLite triggers, recreates the known append-only history guards in PostgreSQL, copies records in dependency order, resets identity sequences, and verifies row counts.
+- Default invocation is a dry run. Applying requires both `--apply` and `--confirm-empty-target`; the destination URL is read only from `EIMS_POSTGRES_URL` so credentials are not placed in command-line arguments.
+- It intentionally does not activate PostgreSQL for Flask. The runtime modules still use SQLite directly, so production remains blocked.
+- Preflight tests cover valid history triggers, unknown-trigger refusal, broken foreign-key refusal and table counting. These tests do not replace a real PostgreSQL migration rehearsal.
