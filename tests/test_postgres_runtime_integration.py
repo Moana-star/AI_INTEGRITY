@@ -21,6 +21,21 @@ class PostgreSQLRuntimeIntegrationTests(unittest.TestCase):
             state["user_id"] = 1
             state["role"] = role
 
+    def test_empty_first_bootstrap_creates_no_fictional_records(self):
+        from modules.database import get_connection
+        connection = get_connection("database/exam_integrity.db")
+        try:
+            for table in ("students", "examinations", "incidents", "invigilators"):
+                count = connection.execute(f"SELECT COUNT(*) AS total FROM {table}").fetchone()["total"]
+                self.assertEqual(count, 0, f"{table} must not be populated with demo records.")
+            admin = connection.execute(
+                "SELECT username, role FROM users"
+            ).fetchall()
+            self.assertEqual(len(admin), 1)
+            self.assertEqual(admin[0]["role"], "admin")
+        finally:
+            connection.close()
+
     def test_health_check_uses_postgresql_connection(self):
         response = self.client.get("/healthz")
         self.assertEqual(response.status_code, 200)
