@@ -135,7 +135,12 @@ def available_tables(connection) -> set[str]:
 
 
 def run(args) -> int:
-    units, venues, enrolments = normalize_inputs(args)
+    try:
+        units, venues, enrolments = normalize_inputs(args)
+    except Exception as error:
+        print(f"IMPORT ABORTED: {error}", file=sys.stderr)
+        return 1
+
     connection = get_connection(args.database)
     try:
         tables = available_tables(connection)
