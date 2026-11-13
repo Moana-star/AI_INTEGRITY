@@ -57,6 +57,7 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
             item.stop()
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
+        student_portal.SCHEMA_READY = False
         os.unlink(self.path)
 
     def _seed_two_student_portal_records(self):
