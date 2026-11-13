@@ -2,11 +2,11 @@
 
 A developing Flask-based university examination operations platform with student registry, academic enrolment, examination sessions, attendance, student self-service, and evidence-controlled incident review workflows.
 
-**Project status:** Institutional development in progress; not production-ready  
-**Stack:** Python · Flask · SQLite · HTML · CSS · JavaScript  
+**Project status:** Operational application under PostgreSQL runtime validation; institutional production acceptance remains outstanding  
+**Stack:** Python · Flask · SQLite (local development) / PostgreSQL (runtime integration under test) · HTML · CSS · JavaScript  
 **Repository:** [Moana-star/AI_INTEGRITY](https://github.com/Moana-star/AI_INTEGRITY)
 
-> **Important:** This is an academic demonstration, not a production-ready institutional platform. Seeded records are synthetic. The review categories are rule-based indicators—not predictions, proof of misconduct, or automated disciplinary decisions. Do not enter real student or institutional data.
+> **Operational data policy:** Fresh database initialization is empty by default. No fictional students, examinations or incidents are inserted unless the explicit `--demo` option is used. Use institution-authorized records only in an approved environment. Production release remains gated on PostgreSQL runtime verification, security review, backup recovery and university approval. Incident review indicators are rule-based and are not proof of misconduct or automated disciplinary decisions.
 
 ## Contents
 
@@ -15,7 +15,7 @@ A developing Flask-based university examination operations platform with student
 - [Architecture](#architecture)
 - [Technology stack](#technology-stack)
 - [Setup and installation](#setup-and-installation)
-- [Demonstration accounts](#demonstration-accounts)
+- [Initial administrator provisioning](#initial-administrator-provisioning)
 - [Incident review categories](#incident-review-categories)
 - [Security and limitations](#security-and-limitations)
 - [Testing](#testing)
@@ -87,7 +87,7 @@ AI_INTEGRITY/
 ├── app.py                    # Flask routes and application logic
 ├── requirements.txt          # Python dependency declaration
 ├── database/
-│   └── database.py           # SQLite schema and demo-data seeding
+│   └── database.py           # Empty-first schema initialization; optional demo seeding
 ├── modules/
 │   ├── access_control.py         # Staff role policy and migration
 │   ├── institutional_registry.py # Student registry and academic history
@@ -178,14 +178,14 @@ python -m pip install -r requirements.txt
 
 ### 4. Configure local environment variables
 
-Set a secret key and unique passwords for the optional demonstration accounts before initializing the database.
+Set a strong secret key and provision the first administrator using deployment-supplied credentials. These values must never be committed.
 
 **Windows PowerShell**
 
 ```powershell
 $env:FLASK_SECRET_KEY = (python -c "import secrets; print(secrets.token_hex(32))")
-$env:DEMO_ADMIN_PASSWORD = "Choose-A-Strong-Local-Password"
-$env:DEMO_INVIGILATOR_PASSWORD = "Choose-Another-Strong-Password"
+$env:EIMS_BOOTSTRAP_ADMIN_USERNAME = "eims-admin"
+$env:EIMS_BOOTSTRAP_ADMIN_PASSWORD = "Use-A-Unique-Password-At-Least-16-Chars"
 ```
 
 Replace the example passwords with strong, unique values. These variables apply only to the current terminal session. Never commit real credentials or secret keys.
@@ -198,16 +198,17 @@ From the repository root:
 python database/database.py
 ```
 
-The script creates the schema and inserts synthetic demonstration records in `database/exam_integrity.db`. The database file is excluded from version control.
+The script creates the core schema with no student, examination, attendance or incident records. If the bootstrap administrator variables are present, it creates that one administrator account. The database file is excluded from version control.
 
-**Existing database note:** Demo accounts are inserted only when their usernames do not already exist. If you need a fresh local demo database, back up anything you need first. The following command permanently deletes the local database and its contents before recreating it:
+**Existing database note:** Initialization is additive and does not delete existing records. Do not manually delete the database to reset a working institution's records. Back up the database and use a reviewed migration procedure for any reset or replacement.
+
+To create synthetic records for isolated development/testing only, run:
 
 ```powershell
-Remove-Item .\database\exam_integrity.db
-python database/database.py
+python database/database.py --demo
 ```
 
-Do not run this command if you need to preserve existing records.
+Never use the demo option for an institutional environment.
 
 ### 6. Start the application
 
@@ -226,18 +227,19 @@ python app.py
 
 Never enable Flask debug mode on a public or production deployment.
 
-## Demonstration accounts
+## Initial administrator provisioning
 
-If the corresponding environment variables are set **before** database initialization, the setup script creates:
+The default initialization does not create public demo accounts. To provision the first administrator, set `EIMS_BOOTSTRAP_ADMIN_USERNAME` and `EIMS_BOOTSTRAP_ADMIN_PASSWORD` securely before initialization. The password must be at least 16 characters. The bootstrap process refuses to overwrite an existing username; it is not a password-reset mechanism.
 
-| Role | Username | Password |
-|---|---|---|
-| Administrator | `admin` | Value assigned to `DEMO_ADMIN_PASSWORD` |
-| Invigilator | `jkamau` | Value assigned to `DEMO_INVIGILATOR_PASSWORD` |
+For local Windows PowerShell:
 
-Passwords are not stored in this repository. If these usernames already exist, `INSERT OR IGNORE` does not replace their existing passwords. Invigilators can also register through the registration page.
+```powershell
+$env:EIMS_BOOTSTRAP_ADMIN_USERNAME = "eims-admin"
+$env:EIMS_BOOTSTRAP_ADMIN_PASSWORD = "Your-Unique-Long-Secret-Here"
+python database/database.py
+```
 
-Use these accounts only in a local demonstration environment.
+After initialization, sign in using that administrator account and provision other institutional staff through the protected staff-account workflow. Deliver credentials only through the institution's approved secure channel. Do not share credentials in source control, screenshots or chat.
 
 ## Incident review categories
 
