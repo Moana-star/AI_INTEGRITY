@@ -27,11 +27,11 @@ python -m unittest discover -v
 
 The application does not create its foundational tables or a default administrator during a login request. Initialize the database explicitly before starting Flask. This prevents an uninitialized database from being mistaken for an authentication failure and avoids shipping a shared default password.
 
-In the same PowerShell session, choose an administrator username and enter a unique password of at least 16 characters. The password prompt below is masked and the temporary environment variables are cleared immediately after initialization:
+In the same PowerShell session, choose an administrator username and enter a unique password of at least 8 characters. The password prompt below is masked and the temporary environment variables are cleared immediately after initialization:
 
 ```powershell
 $adminUsername = Read-Host "Choose the initial administrator username"
-$securePassword = Read-Host "Enter a unique administrator password (minimum 16 characters)" -AsSecureString
+$securePassword = Read-Host "Enter a unique administrator password (minimum 8 characters)" -AsSecureString
 $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
 try {
     $env:EIMS_BOOTSTRAP_ADMIN_USERNAME = $adminUsername.Trim().ToLower()
