@@ -45,7 +45,7 @@ The current application uses local staff/student login. It does not yet support 
 
 ## Biometric status
 
-No biometric provider has been selected. Camera preview is not facial recognition. Live capture, template creation, face matching and liveness checks remain disabled. A future integration requires provider due diligence, a DPIA, lawful-basis determination, data-processing agreement, retention/deletion controls, security testing and an equally usable manual alternative.
+A provider-backed biometric enrolment and attendance workflow is now implemented on the development branch: student enrolment submits a transient capture to an injected provider adapter; invigilator check-in captures a live browser frame, validates the selected session candidate and eligibility, and records attendance only when the provider confirms both a one-to-one match and liveness. EIMS stores opaque provider references and append-only verification metadata, not face images or templates. The workflow has no mock provider and returns unavailable until an institution-approved provider is configured and both deployment approval gates are enabled. No provider has been selected, no credentials supplied and no live biometric verification is active. Activation requires provider due diligence, a DPIA, lawful-basis determination, data-processing agreement, retention/deletion controls, security testing, accuracy/liveness validation and an equally usable manual alternative.
 
 ## University sign-off
 
