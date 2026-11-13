@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Venue History | EIMS{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="eyebrow">AUDITABLE VENUE OPERATIONS</p>
+    <h1>{{ venue.venue_code }} — {{ venue.room_name }}</h1>
+    <p class="muted">Current capacity: {{ venue.capacity }} · Status: {% if venue.active %}Active{% else %}Closed{% endif %}</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('operations.workspace') }}">Back to operations</a>
+</section>
+<section class="panel">
+  <h2>Venue operation history</h2>
+  {% if history %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Recorded</th><th>Action</th><th>Capacity</th><th>Status</th><th>Layout</th><th>Reason</th><th>Actor</th></tr></thead>
+    <tbody>{% for item in history %}
+      <tr>
+        <td>{{ item.created_at }}</td>
+        <td>{{ item.action|replace('_',' ')|title }}</td>
+        <td>{{ item.old_capacity if item.old_capacity is not none else '—' }} → {{ item.new_capacity if item.new_capacity is not none else '—' }}</td>
+        <td>{{ item.old_active if item.old_active is not none else '—' }} → {{ item.new_active if item.new_active is not none else '—' }}</td>
+        <td>{{ item.version_number or '—' }}</td>
+        <td>{{ item.reason }}</td>
+        <td>{{ item.actor_user_id }}</td>
+      </tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="empty-state">No venue lifecycle changes have been recorded.</p>{% endif %}
+</section>
+<section class="panel" style="margin-top:24px">
+  <h2>Immutable seating-layout versions</h2>
+  {% if versions %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Version</th><th>Dimensions</th><th>Created</th><th>Reason</th><th>Creator</th></tr></thead>
+    <tbody>{% for version in versions %}
+      <tr><td>v{{ version.version_number }}</td><td>{{ version.row_count }} rows × {{ version.seats_per_row }} seats</td><td>{{ version.created_at }}</td><td>{{ version.reason }}</td><td>{{ version.created_by or 'Legacy migration' }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="empty-state">No seating-layout versions have been recorded.</p>{% endif %}
+</section>
+{% endblock %}
