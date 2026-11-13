@@ -390,6 +390,8 @@ def prepare():
         ensure_integrity_schema()
         from modules.examination_definitions import ensure_schema as ensure_examination_definition_schema
         ensure_examination_definition_schema()
+        from modules.venue_management import ensure_schema as ensure_venue_management_schema
+        ensure_venue_management_schema()
         SCHEMA_READY = True
 
 
@@ -449,7 +451,7 @@ def workspace():
             SELECT s.id, s.student_number, s.first_name, s.last_name, s.course
             FROM students s ORDER BY s.student_number
         """).fetchall()
-        venues = connection.execute("SELECT * FROM venues WHERE active=1 ORDER BY venue_code").fetchall()
+        venues = connection.execute("SELECT v.*, lv.version_number AS current_layout_version_number FROM venues v LEFT JOIN venue_layout_versions lv ON lv.id=v.current_layout_version_id ORDER BY v.venue_code").fetchall()
         invigilators = connection.execute("""
             SELECT id, employee_number, first_name, last_name
             FROM invigilators WHERE status='active' ORDER BY employee_number
@@ -554,6 +556,10 @@ def create_venue():
             VALUES (?, ?, ?, ?)
         """, (code[:30], building[:100] or None, room[:100], capacity))
         _audit(connection, "create", "venue", cursor.lastrowid, f"Created venue {code}.")
+        from modules.venue_management import _history
+        _history(connection, cursor.lastrowid, "registered",
+                 f"Venue {code} registered with an initial declared capacity.",
+                 old_capacity=None, new_capacity=capacity, old_active=None, new_active=1)
         connection.commit()
         flash("Examination venue created.", "success")
     except sqlite3.IntegrityError:
@@ -566,45 +572,16 @@ def create_venue():
 
 @operations_bp.post("/venues/layout")
 def configure_venue_layout():
+    """Compatibility endpoint; new layout changes are always versioned."""
     if not _require_admin():
         abort(403)
     try:
         venue_id = int(request.form.get("venue_id", ""))
-        rows = int(request.form.get("rows", ""))
-        seats_per_row = int(request.form.get("seats_per_row", ""))
     except (TypeError, ValueError):
-        flash("Enter valid row and seat counts.", "error")
+        flash("Choose a valid venue.", "error")
         return redirect(url_for("operations.workspace"))
-    accessible = {item.strip().upper() for item in (request.form.get("accessible_seats") or "").split(",") if item.strip()}
-    try:
-        seats = build_venue_seats(rows,seats_per_row,accessible)
-    except ValueError as error:
-        flash(str(error), "error")
-        return redirect(url_for("operations.workspace"))
-    connection = db()
-    _begin_scheduling_write(connection)
-    venue = connection.execute("SELECT capacity FROM venues WHERE id=? AND active=1",(venue_id,)).fetchone()
-    used = connection.execute("""
-        SELECT 1 FROM session_seat_assignments a
-        JOIN examination_sessions s ON s.id=a.session_id
-        WHERE s.venue_id=? LIMIT 1
-    """,(venue_id,)).fetchone()
-    if not venue or len(seats)>venue["capacity"] or used:
-        connection.rollback()
-        connection.close()
-        flash("The venue must be active, the layout cannot exceed its capacity, and an allocated layout cannot be replaced.", "error")
-        return redirect(url_for("operations.workspace"))
-    connection.execute("DELETE FROM venue_seats WHERE venue_id=?",(venue_id,))
-    connection.executemany("""
-        INSERT INTO venue_seats(venue_id,seat_label,row_label,seat_number,accessible)
-        VALUES(?,?,?,?,?)
-    """,[(venue_id,*seat) for seat in seats])
-    _audit(connection,"configure_layout","venue",venue_id,
-           f"Configured {rows} rows and {seats_per_row} seats per row; accessible seat count {len(accessible)}.")
-    connection.commit()
-    connection.close()
-    flash(f"Venue layout saved with {len(seats)} seats.", "success")
-    return redirect(url_for("operations.workspace"))
+    from modules.venue_management import create_layout_version
+    return create_layout_version(venue_id)
 
 
 @operations_bp.post("/students/<int:student_id>/accommodations")
@@ -698,13 +675,13 @@ def allocate_session_seats(session_id):
         if not pool:
             pool=accessible_seats
         seat=pool.pop(0)
-        assignments.append((session_id,candidate["student_id"],seat["id"],candidate["extra_time_minutes"],session["user_id"],seat["seat_label"]))
-    for sid,student_id,seat_id,extra_time,actor,label in assignments:
+        assignments.append((session_id,candidate["student_id"],seat["id"],candidate["extra_time_minutes"],session["user_id"],seat["display_label"] or seat["seat_label"],seat["layout_version_id"]))
+    for sid,student_id,seat_id,extra_time,actor,label,layout_version_id in assignments:
         connection.execute("""
             INSERT INTO session_seat_assignments
-                (session_id,student_id,venue_seat_id,extra_time_minutes,assigned_by)
-            VALUES(?,?,?,?,?)
-        """,(sid,student_id,seat_id,extra_time,actor))
+                (session_id,student_id,venue_seat_id,extra_time_minutes,assigned_by,layout_version_id)
+            VALUES(?,?,?,?,?,?)
+        """,(sid,student_id,seat_id,extra_time,actor,layout_version_id))
         connection.execute("UPDATE session_candidates SET seat_label=? WHERE session_id=? AND student_id=?",
                            (label,sid,student_id))
     _audit(connection,"allocate_seats","examination_session",session_id,

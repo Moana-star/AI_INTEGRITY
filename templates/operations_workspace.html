@@ -40,18 +40,37 @@
       <button class="button button-primary" type="submit">Save venue</button>
     </form>
   </section>
+  {% for v in venues %}
   <section class="panel form-panel">
-    <h2>Configure venue seat layout</h2>
-    <form method="post" action="{{ url_for('operations.configure_venue_layout') }}" class="stack-form">
+    <h2>{{ v.venue_code }} — {{ v.room_name }}</h2>
+    <p class="muted">{{ v.building or 'Building not recorded' }} · {{ v.capacity }} seats · {% if v.active %}Active{% else %}Closed{% endif %} · Layout version {% if v.current_layout_version_number %}v{{ v.current_layout_version_number }}{% else %}not configured{% endif %} · <a href="{{ url_for('venue_management.venue_history', venue_id=v.id) }}">Venue history</a></p>
+    <form method="post" action="{{ url_for('venue_management.change_capacity', venue_id=v.id) }}" class="stack-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Venue<select name="venue_id" required>{% for v in venues %}<option value="{{ v.id }}">{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} capacity)</option>{% endfor %}</select></label>
-      <label>Rows (A–Z)<input name="rows" type="number" min="1" max="26" required></label>
-      <label>Seats per row<input name="seats_per_row" type="number" min="1" max="100" required></label>
-      <label>Accessible seat labels (comma-separated)<input name="accessible_seats" placeholder="A-01,A-02"></label>
-      <button class="button button-primary" type="submit">Save seat layout</button>
+      <label>New maximum capacity<input name="capacity" type="number" min="1" max="10000" value="{{ v.capacity }}" required></label>
+      <label>Reason for capacity change<textarea name="reason" minlength="12" maxlength="500" required></textarea></label>
+      <button class="button button-secondary" type="submit">Update capacity</button>
     </form>
-
+    <form method="post" action="{{ url_for('venue_management.change_status', venue_id=v.id) }}" class="stack-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="active" value="{% if v.active %}0{% else %}1{% endif %}">
+      <label>Reason for {% if v.active %}closure{% else %}reopening{% endif %}<textarea name="reason" minlength="12" maxlength="500" required></textarea></label>
+      <button class="button button-secondary" type="submit">{% if v.active %}Close venue{% else %}Reopen venue{% endif %}</button>
+    </form>
+    {% if v.active %}
+    <details>
+      <summary>Create a new seating-layout version</summary>
+      <form method="post" action="{{ url_for('venue_management.create_layout_version', venue_id=v.id) }}" class="stack-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Rows (A–Z)<input name="rows" type="number" min="1" max="26" required></label>
+        <label>Seats per row<input name="seats_per_row" type="number" min="1" max="100" required></label>
+        <label>Accessible seat labels (comma-separated)<input name="accessible_seats" placeholder="A-01,A-02"></label>
+        <label>Reason for new layout version<textarea name="reason" minlength="12" maxlength="500" required></textarea></label>
+        <button class="button button-primary" type="submit">Create layout version</button>
+      </form>
+    </details>
+    {% endif %}
   </section>
+  {% endfor %}
   <section class="panel form-panel">
     <h2>Create examination session</h2>
     <form method="post" action="{{ url_for('operations.create_session') }}" class="stack-form">
@@ -60,7 +79,7 @@
       <label>Linked academic unit<select name="unit_id" required><option value="">Choose unit</option>{% for u in units %}<option value="{{ u.id }}">{{ u.unit_code }} — {{ u.unit_name }}</option>{% endfor %}</select></label>
       <label>Academic year<input name="academic_year" required placeholder="2026/2027"></label>
       <label>Semester<input name="semester" required placeholder="Semester 1"></label>
-      <label>Venue<select name="venue_id"><option value="">Not assigned</option>{% for v in venues %}<option value="{{ v.id }}">{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} seats)</option>{% endfor %}</select></label>
+      <label>Venue<select name="venue_id"><option value="">Not assigned</option>{% for v in venues if v.active %}<option value="{{ v.id }}">{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} seats)</option>{% endfor %}</select></label>
       <label>Examination date<input type="date" name="session_date" min="{{ today }}" required></label>
       <div class="form-row"><label>Start time<input type="time" name="start_time" required></label><label>End time<input type="time" name="end_time" required></label></div>
       <button class="button button-primary" type="submit">Create session and candidate list</button>
@@ -82,7 +101,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>New date<input type="date" name="session_date" value="{{ s.session_date }}" min="{{ today }}" required></label>
       <div class="form-row"><label>New start time<input type="time" name="start_time" value="{{ s.start_time }}" required></label><label>New end time<input type="time" name="end_time" value="{{ s.end_time }}" required></label></div>
-      <label>New venue<select name="venue_id"><option value="">Not assigned</option>{% for v in venues %}<option value="{{ v.id }}" {% if s.venue_id == v.id %}selected{% endif %}>{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} seats)</option>{% endfor %}</select></label>
+      <label>New venue<select name="venue_id"><option value="">Not assigned</option>{% for v in venues if v.active %}<option value="{{ v.id }}" {% if s.venue_id == v.id %}selected{% endif %}>{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} seats)</option>{% endfor %}</select></label>
       <label>Reason for rescheduling<textarea name="reason" minlength="12" maxlength="500" required></textarea></label>
       <button class="button button-primary" type="submit">Save rescheduled session</button>
     </form>

@@ -2,9 +2,9 @@ name: Python tests
 
 on:
   push:
-    branches: ["main", "feature/institutional-eims-foundation", "feature/eims-institutional-completion", "feature/eims-phase-2-examination-management", "feature/eims-phase-2-scheduling-safety"]
+    branches: ["main", "feature/institutional-eims-foundation", "feature/eims-institutional-completion", "feature/eims-phase-2-examination-management", "feature/eims-phase-2-scheduling-safety", "feature/eims-phase-2-venue-lifecycle"]
   pull_request:
-    branches: ["main", "feature/institutional-eims-foundation", "feature/eims-institutional-completion", "feature/eims-phase-2-examination-management", "feature/eims-phase-2-scheduling-safety"]
+    branches: ["main", "feature/institutional-eims-foundation", "feature/eims-institutional-completion", "feature/eims-phase-2-examination-management", "feature/eims-phase-2-scheduling-safety", "feature/eims-phase-2-venue-lifecycle"]
 
 jobs:
   test:
