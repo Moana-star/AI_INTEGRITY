@@ -48,7 +48,7 @@ class PostgresCursor:
     def executemany(self, sql: str, seq_of_parameters):
         translated, wants_id = self.connection.translate(sql, ())
         if wants_id:
-            translated = re.sub(r"\\s+RETURNING\\s+id\\s*$", "", translated, flags=re.I)
+            translated = re.sub(r"\s+RETURNING\s+id\s*$", "", translated, flags=re.I)
         try:
             self.cursor.executemany(translated, seq_of_parameters)
         except Exception as error:
