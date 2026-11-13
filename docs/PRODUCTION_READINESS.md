@@ -45,7 +45,8 @@ These are targeted security improvements, not a substitute for the remaining con
 
 ### Security engineering
 
-- [ ] Replace SQLite with a supported PostgreSQL deployment and test migrations.
+- [x] Add a shared PostgreSQL runtime connection adapter and PostgreSQL CI schema-bootstrap test.
+- [ ] Complete full PostgreSQL application test coverage, concurrency review, versioned schema migrations and production migration rehearsal.
 - [x] Implement CSRF protection for state-changing requests; verify every page and non-form client integration during end-to-end testing.
 - [x] Add IP-based login rate limits for staff and student sign-in; configure shared Redis-compatible storage before production.
 - [ ] Add account-level throttling/lockout policy and MFA for privileged roles.
@@ -94,11 +95,11 @@ These are targeted security improvements, not a substitute for the remaining con
 
 ## Current technical limitations
 
-- The application still uses SQLite and raw SQLite access throughout the legacy application.
+- The application now uses a shared SQLite/PostgreSQL connection layer, but PostgreSQL runtime behavior and schema evolution remain under validation.
 - The student/staff role model is not yet a complete institutional RBAC model.
 - CSRF validation and IP-based login rate limiting are enabled. Production must configure shared Redis-compatible rate-limit storage; account-level lockout and MFA remain outstanding.
 - Evidence files are private by path and access control, but encrypted storage, malware scanning and retention automation are not yet implemented.
-- The automated suite includes PostgreSQL migration integration and a separate Chromium smoke-test job; neither is complete role-based E2E, accessibility, load or penetration coverage.
+- The automated suite includes PostgreSQL data-migration integration, a PostgreSQL runtime schema-bootstrap job and a separate Chromium smoke-test job; these are not complete role-based E2E, accessibility, load or penetration coverage.
 - The biometric provider is not connected.
 - No university SIS integration or institutional deployment is configured.
 
