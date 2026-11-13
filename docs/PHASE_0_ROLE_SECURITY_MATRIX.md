@@ -32,7 +32,7 @@ The server-side code must enforce these boundaries. Navigation visibility is not
 
 ## Important coverage limits
 
-The route matrix currently uses one selected denied role per blueprint plus anonymous requests. It does **not** exhaustively test every one of the five roles against every route, HTTP method, and object identifier. Positive access is tested in selected workflows, not every endpoint.
+The route matrix now tests every role excluded by each protected blueprint against every registered route and supported HTTP method, plus anonymous requests. This is exhaustive for the **blueprint-level role boundary**, not a complete endpoint-by-endpoint authorization specification: some routes deliberately permit a broad blueprint role set and then apply narrower route-specific checks. Positive access and object ownership are tested in selected workflows, including two-student portal isolation, cross-student incident response denial, assigned-invigilator workspace scoping, and denial of attendance writes to an unassigned session. The full URL-rule × role × object-ID matrix is not yet certified.
 
 Additional work required before institutional acceptance:
 
@@ -58,3 +58,8 @@ Additional work required before institutional acceptance:
 No claim is made that the following are complete or independently verified: MFA, account lockout, full session revocation/expiry, exhaustive object-level authorization, malware scanning, encryption/key custody for backups and evidence, backup restore drills, monitoring/incident response, independent penetration testing, DPIA/lawful-basis review, accessibility, load and concurrency testing.
 
 **Release decision:** Automated baseline tests passing is not a production security certification. The institution's ICT/security and data protection owners must review and approve the system before live student data or biometric processing.
+
+
+## Latest repository verification
+
+The latest branch-head CI run [43396130675](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43396130675) passed all four jobs: unit tests, browser smoke, PostgreSQL runtime and container build. A passing run demonstrates the tests in the repository, not every possible route/object combination or production security certification.
