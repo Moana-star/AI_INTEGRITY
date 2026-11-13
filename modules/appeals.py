@@ -10,6 +10,7 @@ import os
 import sqlite3
 from datetime import date, timedelta
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
+from modules.database import get_connection
 from modules.integrity import ensure_schema as ensure_integrity_schema
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 
@@ -31,10 +32,7 @@ def within_senate_review_period(communicated_at, submitted_at):
 
 
 def db():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def ensure_schema():
