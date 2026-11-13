@@ -44,6 +44,38 @@ class PostgreSQLRuntimeIntegrationTests(unittest.TestCase):
                     f"{path} failed during PostgreSQL schema initialization: {response.get_data(as_text=True)[:1000]}",
                 )
 
+    def test_registry_can_create_and_read_a_real_student_record(self):
+        self._as_role("registrar")
+        response = self.client.post(
+            "/admin/registry/students/new",
+            data={
+                "admission_number": "PG-RUNTIME-001",
+                "first_name": "Runtime",
+                "last_name": "Candidate",
+                "course": "Computer Science",
+                "year_of_study": "1",
+                "faculty": "Computing",
+                "department": "Computer Science",
+                "institutional_email": "pg-runtime-001@example.invalid",
+                "phone": "",
+                "academic_status": "active",
+                "academic_year": "2026/2027",
+                "semester": "1",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        from modules.database import get_connection
+        connection = get_connection("database/exam_integrity.db")
+        try:
+            record = connection.execute(
+                "SELECT student_number, first_name, last_name FROM students WHERE student_number=?",
+                ("PG-RUNTIME-001",),
+            ).fetchone()
+            self.assertIsNotNone(record)
+            self.assertEqual(record["first_name"], "Runtime")
+        finally:
+            connection.close()
+
     def test_biometric_routes_fail_closed_without_provider(self):
         self._as_role("admin")
         response = self.client.post("/biometric/students/1/enrol")
