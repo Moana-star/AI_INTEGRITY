@@ -10,6 +10,7 @@ import os
 import sqlite3
 from datetime import datetime
 from flask import Blueprint, abort, current_app, flash, redirect, request, session, url_for
+from modules.database import get_connection
 from werkzeug.exceptions import HTTPException
 from modules.biometric_verification import (
     BiometricProviderUnavailable,
@@ -23,10 +24,7 @@ MAX_CAPTURE_BYTES = 5 * 1024 * 1024
 
 
 def db():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def ensure_schema():
