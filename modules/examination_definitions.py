@@ -14,23 +14,20 @@ import sqlite3
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 
-from modules.database import get_connection
+from modules.access_control import has_permission
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.integrity import ensure_schema as ensure_integrity_schema
-from modules.operations import ensure_schema as ensure_operations_schema, _audit
+from modules.operations import ensure_schema as ensure_operations_schema, _audit, db as operations_db
 
 examination_definitions_bp = Blueprint(
     "examination_definitions", __name__, url_prefix="/admin/examinations"
-)
-DATABASE = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db"
 )
 SCHEMA_READY = False
 CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9./_-]{1,24}$")
 
 
 def db():
-    return get_connection(DATABASE)
+    return operations_db()
 
 
 def ensure_schema():
@@ -68,10 +65,7 @@ def ensure_schema():
 
 
 def _authorized():
-    return (
-        "user_id" in session
-        and session.get("role") in {"admin", "examination_officer"}
-    )
+    return "user_id" in session and has_permission(session.get("role"), "exams.write")
 
 
 def _values(source):
