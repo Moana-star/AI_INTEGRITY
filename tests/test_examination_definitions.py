@@ -56,9 +56,11 @@ class ExaminationDefinitionManagementTests(unittest.TestCase):
         self.registry_patch = patch.object(institutional_registry, "DATABASE", self.path)
         self.operations_patch = patch.object(operations, "DATABASE", self.path)
         self.integrity_patch = patch.object(integrity, "DATABASE", self.path)
+        self.definition_patch = patch.object(examination_definitions, "DATABASE", self.path)
         self.registry_patch.start()
         self.operations_patch.start()
         self.integrity_patch.start()
+        self.definition_patch.start()
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
         examination_definitions.SCHEMA_READY = False
@@ -79,6 +81,7 @@ class ExaminationDefinitionManagementTests(unittest.TestCase):
         self.registry_patch.stop()
         self.operations_patch.stop()
         self.integrity_patch.stop()
+        self.definition_patch.stop()
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
         examination_definitions.SCHEMA_READY = False
