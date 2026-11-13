@@ -10,6 +10,7 @@ import os
 import sqlite3
 from datetime import datetime
 from flask import Blueprint, abort, current_app, flash, redirect, request, session, url_for
+from werkzeug.exceptions import HTTPException
 from modules.biometric_verification import (
     BiometricProviderUnavailable,
     BiometricVerificationDisabled,
@@ -159,6 +160,8 @@ def enrol_student(student_id):
               "Provider-managed biometric enrolment reference recorded; no face image stored by EIMS."))
         connection.commit()
         flash("Biometric enrolment completed by the configured provider.", "success")
+    except HTTPException:
+        raise
     except Exception:
         connection.rollback()
         current_app.logger.exception("Biometric enrolment failed")
@@ -255,6 +258,8 @@ def verify_exam_attendance(session_id, student_id):
               "Attendance recorded after approved provider one-to-one face and liveness verification."))
         connection.commit()
         flash("Identity verified and examination attendance recorded.", "success")
+    except HTTPException:
+        raise
     except (BiometricVerificationDisabled, BiometricProviderUnavailable, ValueError) as exc:
         connection.rollback()
         flash(str(exc) + " No attendance was recorded.", "error")
