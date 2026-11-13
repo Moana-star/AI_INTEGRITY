@@ -312,12 +312,6 @@ def workspace():
     if session.get("role") == "invigilator":
         # An invigilator sees only the sessions assigned to their own staff record,
         # and only the candidates/units/venues connected to those sessions.
-        assigned_filter = """
-            FROM examination_sessions es
-            JOIN session_invigilators si ON si.session_id=es.id
-            JOIN invigilators i ON i.id=si.invigilator_id
-            WHERE i.user_id=?
-        """
         uid = (session["user_id"],)
         sessions = connection.execute(session_sql + """
             JOIN session_invigilators si ON si.session_id=es.id
