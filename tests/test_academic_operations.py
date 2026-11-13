@@ -165,13 +165,13 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         with client.session_transaction() as browser_session:
             browser_session["user_id"] = 1
             browser_session["role"] = "invigilator"
-        response = client.get("/operations/")
+        with patch("modules.operations.render_template", return_value="workspace") as rendered:
+            response = client.get("/operations/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"ASSIGNED-SESSION", response.data)
-        self.assertIn(b"Assigned Student", response.data)
-        self.assertNotIn(b"UNASSIGNED-SESSION", response.data)
-        self.assertNotIn(b"Other Student", response.data)
-        self.assertNotIn(b"Other Examination", response.data)
+        context = rendered.call_args.kwargs
+        self.assertEqual([row["session_code"] for row in context["sessions"]], ["ASSIGNED-SESSION"])
+        self.assertEqual([row["student_number"] for row in context["students"]], ["KSU/ASSIGNED/001"])
+        self.assertEqual([row["examination_name"] for row in context["exams"]], ["Assigned Examination"])
 
     def test_reconciliation_flags_missing_checkin_for_review_not_absence(self):
         connection = sqlite3.connect(self.path)
