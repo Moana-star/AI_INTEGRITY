@@ -9,6 +9,9 @@ class LegacyStudentRouteTests(unittest.TestCase):
         self.previous_csrf = app.config.get("WTF_CSRF_ENABLED")
         app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
         self.client = app.test_client()
+        with self.client.session_transaction() as state:
+            state["user_id"] = 1
+            state["role"] = "admin"
 
     def tearDown(self):
         app.config.update(
