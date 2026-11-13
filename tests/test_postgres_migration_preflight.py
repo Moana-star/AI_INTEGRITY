@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine
 
-from scripts.migrate_sqlite_to_postgres import table_counts, validate_source
+from scripts.migrate_sqlite_to_postgres import create_consistent_snapshot, table_counts, validate_source
 
 
 class SQLiteToPostgresMigrationPreflightTests(unittest.TestCase):
@@ -43,6 +43,15 @@ class SQLiteToPostgresMigrationPreflightTests(unittest.TestCase):
             os.unlink(self.path)
         except FileNotFoundError:
             pass
+
+    def test_consistent_snapshot_preserves_source_records_and_triggers(self):
+        snapshot = create_consistent_snapshot(Path(self.path))
+        try:
+            tables, triggers = validate_source(snapshot)
+            self.assertIn("academic_history_events", tables)
+            self.assertEqual(len(triggers), 2)
+        finally:
+            snapshot.unlink(missing_ok=True)
 
     def test_preflight_accepts_valid_source_and_known_immutable_triggers(self):
         tables, triggers = validate_source(Path(self.path))
