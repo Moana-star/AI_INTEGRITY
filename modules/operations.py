@@ -952,8 +952,8 @@ def set_attendance_exception(session_id, student_id):
 
 @operations_bp.post("/sessions/<int:session_id>/candidates/<int:student_id>/incidents")
 def report_session_incident(session_id, student_id):
-    if not _require_staff():
-        return redirect(url_for("login"))
+    if session.get("role") not in {"admin", "examination_officer", "invigilator"}:
+        abort(403)
     connection = db()
     session_row = connection.execute("SELECT * FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
     if not session_row or session_row["status"] not in {"scheduled", "active"}:
