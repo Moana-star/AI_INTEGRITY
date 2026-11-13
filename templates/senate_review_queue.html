@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Senate Verdict Reviews | EIMS{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Kisii University · Academic governance</p><h1>Senate disciplinary verdicts and review requests</h1><p class="page-subtitle">The handbook provides 21 calendar days from communication of a Senate verdict to request review. This register records the communication date and the student's submission; it does not make a Senate decision.</p></div></header>
+{% if session.get('role') in ['admin','registrar'] %}
+<section class="panel"><h2>Record communicated Senate verdict</h2><p class="field-hint">Record only a formal Senate verdict. The student identity is taken from the linked incident record.</p>
+<form method="post" action="{{ url_for('appeals.record_senate_verdict') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Incident record ID<input name="incident_id" type="number" min="1" required></label>
+<label>Official verdict reference<input name="verdict_reference" maxlength="120" required></label>
+<label>Verdict summary<textarea name="verdict_summary" minlength="20" maxlength="1000" required></textarea></label>
+<label>Date communicated to student<input name="communicated_at" type="date" required></label>
+<label>Official source reference<input name="source_reference" minlength="8" maxlength="500" required></label>
+<button class="btn btn-primary" type="submit">Record verdict communication</button>
+</form>
+</section>
+{% endif %}
+<section class="panel"><h2>Recorded verdicts and review requests</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Student</th><th>Verdict</th><th>Communicated</th><th>Review deadline</th><th>Request</th></tr></thead><tbody>
+{% for v in verdicts %}<tr><td>{{ v.student_number }} · {{ v.first_name }} {{ v.last_name }}</td><td>{{ v.verdict_reference }}<small class="cell-note">{{ v.verdict_summary }}</small></td><td>{{ v.communicated_at }}</td><td>{{ v.communicated_at }} + 21 days</td><td>{% if v.request_id %}{{ v.request_status|replace('_',' ')|title }}<small class="cell-note">{{ v.request_text }}</small>{% else %}No request recorded{% endif %}</td></tr>{% else %}<tr><td colspan="5">No Senate verdicts have been recorded.</td></tr>{% endfor %}
+</tbody></table></div></section>
+<p class="field-hint">The Senate review process and committee composition must be administered by the University's authorized offices. EIMS records the submission and deadline; it does not adjudicate the review.</p>
+{% endblock %}

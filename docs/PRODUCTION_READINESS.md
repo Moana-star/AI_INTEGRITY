@@ -45,7 +45,8 @@ These are targeted security improvements, not a substitute for the remaining con
 
 ### Security engineering
 
-- [ ] Replace SQLite with a supported PostgreSQL deployment and test migrations.
+- [x] Add a shared PostgreSQL runtime connection adapter and PostgreSQL CI schema-bootstrap test.
+- [ ] Complete full PostgreSQL application test coverage, concurrency review, versioned schema migrations and production migration rehearsal.
 - [x] Implement CSRF protection for state-changing requests; verify every page and non-form client integration during end-to-end testing.
 - [x] Add IP-based login rate limits for staff and student sign-in; configure shared Redis-compatible storage before production.
 - [ ] Add account-level throttling/lockout policy and MFA for privileged roles.
@@ -84,6 +85,7 @@ These are targeted security improvements, not a substitute for the remaining con
 ### Operational assurance
 
 - [ ] Complete end-to-end tests for each role and workflow.
+- [ ] Expand the new Chromium smoke tests (public landing, staff sign-in, student sign-in and mobile viewport) into full role-based workflows.
 - [ ] Complete accessibility and usability testing with representative users.
 - [ ] Configure production WSGI hosting, TLS, monitoring and managed secrets.
 - [ ] Perform backup restoration and disaster-recovery drills.
@@ -93,12 +95,15 @@ These are targeted security improvements, not a substitute for the remaining con
 
 ## Current technical limitations
 
-- The application still uses SQLite and raw SQLite access throughout the legacy application.
+- The application now uses a shared SQLite/PostgreSQL connection layer, but PostgreSQL runtime behavior and schema evolution remain under validation.
 - The student/staff role model is not yet a complete institutional RBAC model.
 - CSRF validation and IP-based login rate limiting are enabled. Production must configure shared Redis-compatible rate-limit storage; account-level lockout and MFA remain outstanding.
 - Evidence files are private by path and access control, but encrypted storage, malware scanning and retention automation are not yet implemented.
-- The current test suite is a small automated foundation, not comprehensive coverage.
+- The automated suite includes PostgreSQL data-migration integration, a PostgreSQL runtime schema-bootstrap job and a separate Chromium smoke-test job; these are not complete role-based E2E, accessibility, load or penetration coverage. A non-root Docker image and PostgreSQL/Redis Compose configuration are also built/validated in CI. The PostgreSQL runtime suite covers empty-first bootstrap/idempotence, schema creation, student/unit writes, append-only history and biometric fail-closed behavior.
 - The biometric provider is not connected.
 - No university SIS integration or institutional deployment is configured.
 
 A successful unit-test workflow does not certify production security, legal compliance, or operational readiness.
+
+
+See [Institutional Integration and Production Acceptance](INSTITUTIONAL_INTEGRATION_AND_PRODUCTION_ACCEPTANCE.md) for the evidence-backed closure checklist and required Kisii University owners.

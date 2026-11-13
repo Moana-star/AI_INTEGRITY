@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 import uuid
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, session, url_for
+from modules.database import get_connection
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 
 integrity_bp = Blueprint("integrity", __name__, url_prefix="/integrity")
@@ -21,10 +22,7 @@ CASE_STATUSES = {
 
 
 def db():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def ensure_schema():
@@ -106,7 +104,7 @@ SCHEMA_READY = False
 
 
 def staff():
-    return "user_id" in session and session.get("role") in {"admin", "invigilator"}
+    return "user_id" in session and session.get("role") in {"admin", "examination_officer", "invigilator"}
 
 
 @integrity_bp.before_request
@@ -120,6 +118,38 @@ def prepare():
         ensure_operations_schema()
         ensure_schema()
         SCHEMA_READY = True
+
+
+@integrity_bp.get("/incidents")
+def case_list():
+    connection = db()
+    query = """
+        SELECT i.id, i.incident_type, i.severity, i.reported_at,
+               s.student_number, s.first_name, s.last_name, e.course_code,
+               COALESCE(w.case_status, 'reported') AS case_status
+        FROM incidents i
+        LEFT JOIN students s ON s.id=i.student_id
+        LEFT JOIN examinations e ON e.id=i.examination_id
+        LEFT JOIN incident_case_workflow w ON w.incident_id=i.id
+    """
+    params = ()
+    if session.get("role") == "invigilator":
+        query += """
+            WHERE EXISTS (
+                SELECT 1 FROM examinations ex JOIN invigilators v ON v.id=ex.invigilator_id
+                WHERE ex.id=i.examination_id AND v.user_id=?
+            ) OR EXISTS (
+                SELECT 1 FROM incident_session_links l
+                JOIN session_invigilators si ON si.session_id=l.session_id
+                JOIN invigilators v ON v.id=si.invigilator_id
+                WHERE l.incident_id=i.id AND v.user_id=?
+            )
+        """
+        params = (session["user_id"], session["user_id"])
+    query += " ORDER BY i.reported_at DESC"
+    incidents = connection.execute(query, params).fetchall()
+    connection.close()
+    return render_template("incident_cases.html", incidents=incidents)
 
 
 @integrity_bp.get("/incidents/<int:incident_id>")
@@ -167,12 +197,12 @@ def case_detail(incident_id):
     connection.close()
     return render_template("incident_case.html", incident=incident, evidence=evidence,
                            events=events, student_response=student_response,
-                           statuses=sorted(CASE_STATUSES), is_admin=session.get("role")=="admin")
+                           statuses=sorted(CASE_STATUSES), is_admin=session.get("role") in {"admin", "examination_officer"})
 
 
 @integrity_bp.post("/incidents/<int:incident_id>/status")
 def update_case_status(incident_id):
-    if session.get("role") != "admin":
+    if session.get("role") not in {"admin", "examination_officer"}:
         abort(403)
     status = (request.form.get("case_status") or "").strip()
     note = " ".join((request.form.get("review_note") or "").split())
@@ -291,7 +321,7 @@ def upload_evidence(incident_id):
 
 @integrity_bp.get("/evidence/<int:evidence_id>")
 def download_evidence(evidence_id):
-    if session.get("role") != "admin":
+    if session.get("role") not in {"admin", "examination_officer"}:
         abort(403)
     connection = db()
     record = connection.execute("SELECT * FROM incident_evidence WHERE id=?", (evidence_id,)).fetchone()

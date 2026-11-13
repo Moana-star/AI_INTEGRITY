@@ -33,8 +33,8 @@ The automated suite covers additive registry and operations schemas, preservatio
 | T04 | Admin access | Sign in with the locally configured admin account | Administrator dashboard opens | Not run |
 | T05 | Invigilator access | Sign in with the locally configured invigilator account | Invigilator dashboard opens | Not run |
 | T06 | Role access | Open an administrator route while signed out or signed in as an invigilator | Access is redirected or denied | Not run |
-| T07 | Registration | Register a new invigilator with valid details | Account is created and can sign in | Not run |
-| T08 | Registration | Attempt self-registration with the administrator role | Registration is rejected | Not run |
+| T07 | Staff provisioning | As administrator, provision a staff account with an approved reason | Account and role-audit record are created; credentials are delivered securely | Not run |
+| T08 | Registration | Attempt public self-registration with any staff role | Registration is rejected; no account is created | Not run |
 | T09 | Students | Create and review a student record as an administrator | The saved record appears in the relevant view | Not run |
 | T10 | Examinations | Create or update an examination and assign an invigilator | Saved details appear in the examination view | Not run |
 | T11 | Incidents | Record an incident for a valid student and examination | The incident appears in the incident list | Not run |

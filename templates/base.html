@@ -7,6 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Examination Integrity Management System{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/identity.css') }}">
     <script src="{{ url_for('static', filename='js/csrf.js') }}" defer></script>
 </head>
 <body>
@@ -23,12 +24,24 @@
                 <a href="{{ url_for('admin_students') }}" {% if request.endpoint in ['admin_students','add_student','edit_student'] %}class="active" aria-current="page"{% endif %}>Students</a>
                 <a href="{{ url_for('registry.students') }}" {% if request.blueprint == 'registry' %}class="active" aria-current="page"{% endif %}>Institutional Registry</a>
                 <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Academic Operations</a>
+                <a href="{{ url_for('eligibility.workspace') }}" {% if request.blueprint == 'eligibility' %}class="active" aria-current="page"{% endif %}>Eligibility Policies</a>
+                <a href="{{ url_for('integrity.case_list') }}" {% if request.endpoint == 'integrity.case_list' %}class="active" aria-current="page"{% endif %}>Incident Cases</a>
+                <a href="{{ url_for('appeals.staff_queue') }}" {% if request.blueprint == 'appeals' %}class="active" aria-current="page"{% endif %}>Student Appeals</a>
                 <a href="{{ url_for('admin_examinations') }}" {% if request.endpoint in ['admin_examinations','add_examination','edit_examination'] %}class="active" aria-current="page"{% endif %}>Examinations</a>
                 <a href="{{ url_for('admin_invigilators') }}" {% if request.endpoint in ['admin_invigilators','add_invigilator','edit_invigilator'] %}class="active" aria-current="page"{% endif %}>Invigilators</a>
                 <a href="{{ url_for('admin_incidents') }}" {% if request.endpoint in ['admin_incidents','add_incident'] %}class="active" aria-current="page"{% endif %}>Incidents</a>
                 <a href="{{ url_for('admin_reports') }}" {% if request.endpoint == 'admin_reports' %}class="active" aria-current="page"{% endif %}>Reports</a>
                 <a href="{{ url_for('admin_ai_analysis') }}" {% if request.endpoint == 'admin_ai_analysis' %}class="active" aria-current="page"{% endif %}>Risk Analysis</a>
                 <a href="{{ url_for('admin_settings') }}" {% if request.endpoint == 'admin_settings' %}class="active" aria-current="page"{% endif %}>Settings</a>
+                <a href="{{ url_for('institutional_users') }}" {% if request.endpoint == 'institutional_users' %}class="active" aria-current="page"{% endif %}>Staff Accounts</a>
+                {% elif session.get('role') == 'registrar' %}
+                <a href="{{ url_for('registry.students') }}" {% if request.blueprint == 'registry' %}class="active" aria-current="page"{% endif %}>Student Registry</a>
+                <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Academic Enrolments</a>
+                {% elif session.get('role') == 'examination_officer' %}
+                <a href="{{ url_for('operations.workspace') }}" {% if request.blueprint == 'operations' %}class="active" aria-current="page"{% endif %}>Examination Operations</a>
+                <a href="{{ url_for('eligibility.workspace') }}" {% if request.blueprint == 'eligibility' %}class="active" aria-current="page"{% endif %}>Eligibility Policies</a>
+                <a href="{{ url_for('integrity.case_list') }}" {% if request.endpoint == 'integrity.case_list' %}class="active" aria-current="page"{% endif %}>Incident Cases</a>
+                <a href="{{ url_for('appeals.staff_queue') }}" {% if request.blueprint == 'appeals' %}class="active" aria-current="page"{% endif %}>Student Appeals</a>
                 {% elif session.get('role') == 'student' %}
                 <a href="{{ url_for('student_portal.portal') }}">My student portal</a>
                 {% else %}
@@ -38,7 +51,7 @@
                 {% endif %}
             </nav>
             <div class="sidebar-footer">
-                <div class="sidebar-user"><strong>{{ session.get('username') }}</strong><span>{{ 'Administrator' if session.get('role') == 'admin' else ('Student' if session.get('role') == 'student' else 'Invigilator') }}</span></div>
+                <div class="sidebar-user"><strong>{{ session.get('username') }}</strong><span>{{ {'admin':'Administrator','registrar':'Registrar','examination_officer':'Examination Officer','invigilator':'Invigilator','student':'Student'}.get(session.get('role'), 'Staff') }}</span></div>
                 <form method="POST" action="{{ url_for('logout') }}"><button class="logout-link" type="submit">Sign out</button></form>
             </div>
         </aside>

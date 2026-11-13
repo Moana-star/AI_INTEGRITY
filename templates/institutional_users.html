@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Institutional Staff Accounts | EIMS{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Kisii University · Administration</p><h1>Institutional staff accounts</h1><p class="page-subtitle">Provision staff accounts only after confirming their institutional authorization.</p></div></section>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<section class="panel">
+<h2>Create staff account</h2>
+<form method="post" action="{{ url_for('institutional_users') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="form-grid">
+<label>Full name<input name="full_name" maxlength="100" required></label>
+<label>Username<input name="username" minlength="3" maxlength="32" required></label>
+<label>Initial password<input type="password" name="password" minlength="12" autocomplete="new-password" required></label>
+<label>Institutional role<select name="role" required><option value="">Choose role</option><option value="registrar">Registrar</option><option value="examination_officer">Examination Officer</option><option value="invigilator">Invigilator</option><option value="admin">Administrator</option></select></label>
+<label>Employee number (required for invigilators)<input name="employee_number" maxlength="60"></label>
+<label>Department / unit<input name="department" maxlength="120"></label>
+<label class="form-grid-full">Authorization reason<input name="reason" minlength="10" maxlength="500" required></label>
+</div>
+<p class="field-hint">Use a unique, temporary password and deliver it through an institution-approved secure channel. Password reset, MFA and institutional identity verification are not yet integrated.</p>
+<button class="btn btn-primary" type="submit">Create staff account</button>
+</form>
+</section>
+<section class="panel"><h2>Existing staff accounts</h2>
+<div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th></tr></thead><tbody>
+{% for user in users %}<tr><td>{{ user.full_name }}</td><td>{{ user.username }}</td><td>{{ {'admin': 'Administrator', 'registrar': 'Registrar', 'examination_officer': 'Examination Officer', 'invigilator': 'Invigilator'}.get(user.institutional_role, 'Unrecognized role') }}</td></tr>{% else %}<tr><td colspan="3">No staff accounts found.</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}

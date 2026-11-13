@@ -9,25 +9,50 @@ from modules.institutional_registry import registry_bp
 from modules.operations import operations_bp
 from modules.integrity import integrity_bp
 from modules.student_portal import student_bp
+from modules.eligibility import eligibility_bp
+from modules.appeals import appeals_bp
+from modules.identity_check import identity_bp
+from modules.biometric_attendance import biometric_attendance_bp
+from modules.access_control import (STAFF_ROLES, effective_user_role, ensure_role_schema, legacy_role_for)
+from modules.database import get_connection, is_postgres
 
 app = Flask(__name__)
-if os.environ.get("FLASK_ENV") == "production" and not os.environ.get("FLASK_SECRET_KEY"):
-    raise RuntimeError("FLASK_SECRET_KEY must be configured for production.")
+if os.environ.get("FLASK_ENV") == "production":
+    if not is_postgres():
+        raise RuntimeError("Production requires DATABASE_URL pointing to PostgreSQL; SQLite is local-development only.")
+    if not os.environ.get("FLASK_SECRET_KEY") or len(os.environ["FLASK_SECRET_KEY"]) < 32:
+        raise RuntimeError("Production requires a securely generated FLASK_SECRET_KEY of at least 32 characters.")
+    if not os.environ.get("RATELIMIT_STORAGE_URI", "").startswith(("redis://", "rediss://")):
+        raise RuntimeError("Production requires Redis-backed rate-limit storage; in-memory limits are not multi-worker safe.")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 CSRFProtect(app)
 rate_limit_storage = os.environ.get("RATELIMIT_STORAGE_URI")
-if os.environ.get("FLASK_ENV") == "production" and not rate_limit_storage:
-    raise RuntimeError("RATELIMIT_STORAGE_URI must point to shared Redis-compatible storage in production.")
 app.config["RATELIMIT_STORAGE_URI"] = rate_limit_storage or "memory://"
 limiter.init_app(app)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
-                  SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "0") == "1",
+                  SESSION_COOKIE_SECURE=os.environ.get("FLASK_HTTPS", "1" if os.environ.get("FLASK_ENV") == "production" else "0") == "1",
                   MAX_CONTENT_LENGTH=6 * 1024 * 1024)
 
 app.register_blueprint(registry_bp)
 app.register_blueprint(operations_bp)
 app.register_blueprint(integrity_bp)
 app.register_blueprint(student_bp)
+app.register_blueprint(eligibility_bp)
+app.register_blueprint(appeals_bp)
+app.register_blueprint(identity_bp)
+app.register_blueprint(biometric_attendance_bp)
+
+
+@app.after_request
+def apply_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+    if os.environ.get("FLASK_ENV") == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
 
 DATABASE = os.path.join(os.path.dirname(__file__), "database", "exam_integrity.db")
 
@@ -49,10 +74,7 @@ def health_check():
 
 
 def get_db_connection():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def get_student_risk_records(connection):
@@ -116,7 +138,12 @@ def home():
         return redirect(url_for("admin_dashboard"))
     if invigilator_required():
         return redirect(url_for("invigilator_dashboard"))
-    if session.get("role") == "student" and session.get("student_id"):
+    role = session.get("role")
+    if role == "registrar":
+        return redirect(url_for("registry.students"))
+    if role == "examination_officer":
+        return redirect(url_for("operations.workspace"))
+    if role == "student" and session.get("student_id"):
         return redirect(url_for("student_portal.portal"))
     return render_template("index.html")
 
@@ -129,78 +156,102 @@ def login():
 
     username = (request.form.get("username") or "").strip()
     password = request.form.get("password") or ""
-    role = request.form.get("role")
+    requested_role = (request.form.get("role") or "").strip().lower()
 
-    if not username or not password or not role:
+    if not username or not password or not requested_role:
         return render_template("login.html", error="Please complete all login fields.")
-
-    if role not in {"admin", "invigilator"}:
+    if requested_role not in STAFF_ROLES:
         return render_template("login.html", error="Invalid username or password.")
 
     connection = get_db_connection()
-    user = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    connection.close()
+    try:
+        ensure_role_schema(connection)
+        user = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        actual_role = effective_user_role(user)
+    finally:
+        connection.close()
 
-    if user is None or not check_password_hash(user["password"], password):
-        return render_template("login.html", error="Invalid username or password.")
-
-    if user["role"] != role:
+    if user is None or not check_password_hash(user["password"], password) or actual_role != requested_role:
         return render_template("login.html", error="Invalid username or password.")
 
     session.clear()
     session["user_id"] = user["id"]
     session["username"] = user["username"]
-    session["role"] = user["role"]
+    session["role"] = actual_role
 
-    if user["role"] == "admin":
+    if actual_role == "admin":
         return redirect(url_for("admin_dashboard"))
-    return redirect(url_for("invigilator_dashboard"))
+    if actual_role == "invigilator":
+        return redirect(url_for("invigilator_dashboard"))
+    if actual_role == "registrar":
+        return redirect(url_for("registry.students"))
+    return redirect(url_for("operations.workspace"))
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == "GET":
-        return render_template("register.html")
+    # Staff access is institution-controlled. Public self-registration would
+    # let an unaffiliated person claim an invigilator identity.
+    return render_template(
+        "register.html",
+        error="Staff accounts are provisioned by an authorized EIMS administrator. Contact your institution's system administrator."
+    )
 
-    full_name = " ".join((request.form.get("full_name") or "").split())
-    username = (request.form.get("username") or "").strip().lower()
-    password = request.form.get("password") or ""
-    confirm_password = request.form.get("confirm_password") or ""
-    role = (request.form.get("role") or "").strip().lower()
 
-    values = {"full_name": full_name, "username": username}
-    if not full_name or not username or not password or not confirm_password or not role:
-        return render_template("register.html", error="Complete all required fields.", values=values)
-    if role != "invigilator":
-        return render_template("register.html", error="Self-registration is available for invigilators only.", values=values)
-    if len(full_name) > 100 or not (3 <= len(username) <= 32) or not all(ch.isalnum() or ch in "._-" for ch in username):
-        return render_template("register.html", error="Enter a name and a username of 3–32 letters, numbers, dots, underscores or hyphens.", values=values)
-    if len(password) < 8:
-        return render_template("register.html", error="Password must be at least 8 characters.", values=values)
-    if password != confirm_password:
-        return render_template("register.html", error="Passwords do not match.", values=values)
-
-    name_parts = full_name.split()
-    first_name = name_parts[0]
-    last_name = " ".join(name_parts[1:]) or first_name
-    employee_number = "REG-" + username.upper()
+@app.route("/admin/institutional-users", methods=["GET", "POST"])
+def institutional_users():
+    if not admin_required():
+        return redirect(url_for("login"))
     connection = get_db_connection()
-    try:
-        cursor = connection.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, 'invigilator')",
-            (username, generate_password_hash(password))
-        )
-        connection.execute(
-            "INSERT INTO invigilators (user_id, employee_number, first_name, last_name, status) VALUES (?, ?, ?, ?, 'active')",
-            (cursor.lastrowid, employee_number, first_name, last_name)
-        )
-        connection.commit()
-    except sqlite3.IntegrityError:
-        connection.rollback()
-        connection.close()
-        return render_template("register.html", error="That username is unavailable. Choose another.", values=values)
+    ensure_role_schema(connection)
+    if request.method == "POST":
+        full_name = " ".join((request.form.get("full_name") or "").split())
+        username = (request.form.get("username") or "").strip().lower()
+        password = request.form.get("password") or ""
+        role = (request.form.get("role") or "").strip().lower()
+        employee_number = (request.form.get("employee_number") or "").strip().upper()
+        department = " ".join((request.form.get("department") or "").split()) or None
+        reason = " ".join((request.form.get("reason") or "").split())
+        valid_username = 3 <= len(username) <= 32 and all(ch.isalnum() or ch in "._-" for ch in username)
+        if (not full_name or len(full_name) > 100 or not valid_username or
+                role not in STAFF_ROLES or len(password) < 12 or len(reason) < 10 or
+                (role == "invigilator" and not employee_number)):
+            connection.close()
+            return render_template("institutional_users.html", users=[],
+                error="Provide a valid name, username, role, 12-character password and reason. Invigilators also require an employee number.")
+        try:
+            legacy_role = legacy_role_for(role)
+            cursor = connection.execute(
+                "INSERT INTO users(username,password,role,institutional_role) VALUES(?,?,?,?)",
+                (username, generate_password_hash(password), legacy_role, role))
+            user_id = cursor.lastrowid
+            if role == "invigilator":
+                parts = full_name.split()
+                connection.execute("""INSERT INTO invigilators
+                    (user_id,employee_number,first_name,last_name,status)
+                    VALUES(?,?,?,?, 'active')""",
+                    (user_id, employee_number, parts[0], " ".join(parts[1:]) or parts[0]))
+            else:
+                connection.execute("""INSERT INTO institutional_staff_profiles
+                    (user_id,full_name,employee_number,department) VALUES(?,?,?,?)""",
+                    (user_id, full_name, employee_number or None, department))
+            connection.execute("""INSERT INTO institutional_role_audit
+                (actor_user_id,target_user_id,previous_role,new_role,reason)
+                VALUES(?,?,NULL,?,?)""", (session["user_id"], user_id, role, reason))
+            connection.commit()
+            flash("Institutional staff account created. Provide its credentials through the institution's approved secure channel.", "success")
+        except sqlite3.IntegrityError:
+            connection.rollback()
+            flash("That username or employee number is already in use.", "error")
+        finally:
+            connection.close()
+        return redirect(url_for("institutional_users"))
+    users = connection.execute("""SELECT u.id,u.username,u.institutional_role,
+        COALESCE(p.full_name, i.first_name || ' ' || i.last_name, u.username) AS full_name
+        FROM users u LEFT JOIN institutional_staff_profiles p ON p.user_id=u.id
+        LEFT JOIN invigilators i ON i.user_id=u.id ORDER BY u.username""").fetchall()
     connection.close()
-    return render_template("register.html", success="Your invigilator account has been created. You can now sign in.")
+    return render_template("institutional_users.html", users=users)
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
@@ -293,119 +344,43 @@ def admin_dashboard():
 
 
 # ============================================================
-# STUDENT MANAGEMENT (full CRUD)
+# LEGACY STUDENT URL COMPATIBILITY
+# The institutional registry is the single authoritative student
+# management workflow. These aliases prevent older forms from bypassing
+# profile validation, audit logging and registrar authorization.
 # ============================================================
 
 @app.route("/admin/students")
 def admin_students():
     if not admin_required():
         return redirect(url_for("login"))
-
-    connection = get_db_connection()
-    students = connection.execute("SELECT * FROM students ORDER BY id ASC").fetchall()
-    connection.close()
-
-    return render_template("students.html", students=students)
+    return redirect(url_for("registry.students"))
 
 
 @app.route("/admin/students/add", methods=["GET", "POST"])
 def add_student():
     if not admin_required():
         return redirect(url_for("login"))
-
-    if request.method == "GET":
-        return render_template("student_form.html", student=None)
-
-    student_number = (request.form.get("student_number") or "").strip()
-    first_name = (request.form.get("first_name") or "").strip()
-    last_name = (request.form.get("last_name") or "").strip()
-    course = (request.form.get("course") or "").strip()
-    year_of_study = request.form.get("year_of_study")
-
-    if not student_number or not first_name or not last_name:
-        return render_template(
-            "student_form.html", student=None,
-            error="Student number, first name and last name are required."
-        )
-
-    connection = get_db_connection()
-    try:
-        year_of_study = int(year_of_study) if year_of_study else None
-        if year_of_study is not None and not 1 <= year_of_study <= 6:
-            raise ValueError
-        connection.execute("""
-            INSERT INTO students (student_number, first_name, last_name, course, year_of_study)
-            VALUES (?, ?, ?, ?, ?)
-        """, (student_number.strip(), first_name.strip(), last_name.strip(), course.strip(), year_of_study))
-        connection.commit()
-    except (sqlite3.IntegrityError, ValueError):
-        connection.close()
-        return render_template("student_form.html", student=None, error="Check the student details. Student number must be unique and year must be between 1 and 6.")
-    connection.close()
-    flash("Student added successfully.", "success")
-
-    return redirect(url_for("admin_students"))
+    status_code = 303 if request.method == "POST" else 302
+    return redirect(url_for("registry.new_student"), code=status_code)
 
 
 @app.route("/admin/students/edit/<int:student_id>", methods=["GET", "POST"])
 def edit_student(student_id):
     if not admin_required():
         return redirect(url_for("login"))
-
-    connection = get_db_connection()
-
-    if request.method == "GET":
-        student = connection.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
-        connection.close()
-        if student is None:
-            return redirect(url_for("admin_students"))
-        return render_template("student_form.html", student=student)
-
-    student_number = (request.form.get("student_number") or "").strip()
-    first_name = (request.form.get("first_name") or "").strip()
-    last_name = (request.form.get("last_name") or "").strip()
-    course = (request.form.get("course") or "").strip()
-    year_of_study = request.form.get("year_of_study")
-
-    try:
-        year_of_study = int(year_of_study) if year_of_study else None
-        if not student_number or not first_name or not last_name or (year_of_study is not None and not 1 <= year_of_study <= 6):
-            raise ValueError
-        connection.execute("""
-        UPDATE students
-        SET student_number = ?, first_name = ?, last_name = ?, course = ?, year_of_study = ?
-        WHERE id = ?
-        """, (student_number.strip(), first_name.strip(), last_name.strip(), course.strip(), year_of_study, student_id))
-        connection.commit()
-    except (sqlite3.IntegrityError, ValueError):
-        connection.close()
-        lookup = get_db_connection()
-        student = lookup.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
-        lookup.close()
-        return render_template("student_form.html", student=student, error="Check the student details. Student number must be unique and year must be between 1 and 6.")
-    connection.close()
-    flash("Student changes saved.", "success")
-
-    return redirect(url_for("admin_students"))
+    status_code = 303 if request.method == "POST" else 302
+    return redirect(url_for("registry.edit_student", student_id=student_id), code=status_code)
 
 
 @app.route("/admin/students/delete/<int:student_id>", methods=["POST"])
 def delete_student(student_id):
     if not admin_required():
         return redirect(url_for("login"))
-
-    connection = get_db_connection()
-    try:
-        connection.execute("DELETE FROM students WHERE id = ?", (student_id,))
-        connection.commit()
-    except sqlite3.IntegrityError:
-        connection.close()
-        flash("This student has linked incident records and cannot be deleted.", "error")
-        return redirect(url_for("admin_students"))
-    connection.close()
-    flash("Student deleted.", "success")
-
-    return redirect(url_for("admin_students"))
+    # Student deletion is intentionally disabled in the legacy interface.
+    # Use governed academic status/history workflows; preserve linked evidence.
+    flash("Direct student deletion is disabled. Update the academic status through the Institutional Registry.", "warning")
+    return redirect(url_for("registry.students"), code=303)
 
 
 # ============================================================
@@ -679,7 +654,13 @@ def admin_incidents():
 
 @app.route("/admin/incidents/add", methods=["GET", "POST"])
 def add_incident():
-    if not admin_required() and not invigilator_required():
+    # The legacy incident form exposes a broad student selector and is not
+    # candidate/session scoped. Invigilators must use the newer session-bound
+    # operations workflow, which validates their assignment and candidate list.
+    if invigilator_required():
+        flash("Report examination incidents from your assigned examination session.", "info")
+        return redirect(url_for("operations.workspace"))
+    if not admin_required():
         return redirect(url_for("login"))
 
     connection = get_db_connection()

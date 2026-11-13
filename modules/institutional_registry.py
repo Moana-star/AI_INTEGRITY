@@ -12,6 +12,7 @@ import os
 import re
 import sqlite3
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from modules.database import get_connection as open_database_connection
 
 registry_bp = Blueprint("registry", __name__, url_prefix="/admin/registry")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
@@ -24,10 +25,7 @@ CSV_FIELDS = {
 
 
 def get_connection():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return open_database_connection(DATABASE)
 
 
 _schema_ready = False
@@ -86,28 +84,32 @@ def ensure_schema():
             FOREIGN KEY (actor_user_id) REFERENCES users(id)
         );
 
-        CREATE TABLE IF NOT EXISTS examination_attendance (
+        CREATE TABLE IF NOT EXISTS academic_history_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            examination_id INTEGER NOT NULL,
             student_id INTEGER NOT NULL,
-            attendance_status TEXT NOT NULL DEFAULT 'present'
-                CHECK (attendance_status IN ('present','absent','late','disputed')),
-            verification_method TEXT NOT NULL DEFAULT 'manual'
-                CHECK (verification_method IN ('manual','student_card','biometric_provider')),
-            verification_status TEXT NOT NULL DEFAULT 'manual_review'
-                CHECK (verification_status IN ('not_attempted','verified','failed','manual_review')),
-            check_in_at TIMESTAMP,
-            check_out_at TIMESTAMP,
-            invigilator_id INTEGER,
-            device_identifier TEXT,
-            override_reason TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (examination_id, student_id),
-            FOREIGN KEY (examination_id) REFERENCES examinations(id) ON DELETE CASCADE,
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-            FOREIGN KEY (invigilator_id) REFERENCES invigilators(id)
+            event_type TEXT NOT NULL CHECK(event_type IN
+                ('programme_change','progression','academic_status_change','deferment','suspension','graduation')),
+            effective_date TEXT NOT NULL,
+            previous_value TEXT,
+            new_value TEXT,
+            reason TEXT NOT NULL,
+            recorded_by INTEGER NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE RESTRICT,
+            FOREIGN KEY(recorded_by) REFERENCES users(id)
         );
+        CREATE INDEX IF NOT EXISTS idx_academic_history_student_date
+            ON academic_history_events(student_id, effective_date DESC, id DESC);
+        CREATE TRIGGER IF NOT EXISTS academic_history_no_update
+        BEFORE UPDATE ON academic_history_events
+        BEGIN SELECT RAISE(ABORT, 'Academic history events are append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS academic_history_no_delete
+        BEFORE DELETE ON academic_history_events
+        BEGIN SELECT RAISE(ABORT, 'Academic history events are append-only'); END;
+
+        -- Deprecated legacy examination_attendance storage is intentionally
+        -- not created for new installations. Existing tables and rows are
+        -- left untouched until a separately reviewed archival migration.
     """)
     connection.close()
 
@@ -115,7 +117,7 @@ def ensure_schema():
 @registry_bp.before_request
 def prepare_registry():
     global _schema_ready
-    if "user_id" not in session or session.get("role") != "admin":
+    if "user_id" not in session or session.get("role") not in {"admin", "registrar"}:
         return redirect(url_for("login"))
     if not _schema_ready:
         ensure_schema()
@@ -217,6 +219,38 @@ def students():
     return render_template("student_registry.html", students=records, query=query)
 
 
+@registry_bp.get("/students/<int:student_id>")
+def student_detail(student_id):
+    """Read-only consolidated view of the student record and unit history."""
+    connection = get_connection()
+    student = connection.execute("""
+        SELECT s.*, p.faculty, p.department, p.institutional_email, p.phone,
+               COALESCE(p.academic_status, 'active') AS academic_status,
+               p.academic_year, p.semester, p.updated_at AS profile_updated_at
+        FROM students s LEFT JOIN student_profiles p ON p.student_id=s.id
+        WHERE s.id=?
+    """, (student_id,)).fetchone()
+    if student is None:
+        connection.close()
+        from flask import abort
+        abort(404)
+    enrolments = connection.execute("""
+        SELECT e.id, e.academic_year, e.semester, e.enrolment_status,
+               e.created_at, u.unit_code, u.unit_name, u.department, u.faculty
+        FROM student_unit_enrolments e
+        JOIN academic_units u ON u.id=e.unit_id
+        WHERE e.student_id=?
+        ORDER BY e.academic_year DESC, e.semester DESC, u.unit_code
+    """, (student_id,)).fetchall()
+    history_count = connection.execute(
+        "SELECT COUNT(*) FROM academic_history_events WHERE student_id=?",
+        (student_id,),
+    ).fetchone()[0]
+    connection.close()
+    return render_template("student_record.html", student=student,
+                           enrolments=enrolments, history_count=history_count)
+
+
 @registry_bp.route("/students/new", methods=["GET", "POST"])
 def new_student():
     if request.method == "POST":
@@ -280,45 +314,178 @@ def edit_student(student_id):
         return render_template("student_registry_form.html", student=student, error=message)
 
 
+def _validate_student_csv(raw, connection):
+    """Validate the complete CSV before writing any student rows.
+
+    Returns (valid_rows, row_errors). A single invalid row blocks the whole
+    import so an operator cannot mistake a partial import for a complete one.
+    """
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise ValueError("The file must be a UTF-8 CSV.")
+
+    reader = csv.DictReader(io.StringIO(text))
+    headers = {header.strip() for header in (reader.fieldnames or []) if header and header.strip()}
+    missing = CSV_FIELDS - headers
+    if missing:
+        raise ValueError("Missing CSV columns: " + ", ".join(sorted(missing)))
+    if not reader.fieldnames:
+        raise ValueError("The CSV file is empty or has no header row.")
+
+    valid_rows = []
+    row_errors = []
+    seen_admissions = set()
+    seen_emails = set()
+    for row_number, row in enumerate(reader, start=2):
+        if None in row:
+            row_errors.append({"row": row_number, "message": "The row contains more values than the header."})
+            continue
+        normalized = {str(key).strip(): (value or "").strip()
+                      for key, value in row.items() if key}
+        try:
+            values = _student_values(normalized)
+            admission, email = values[0], values[7]
+            if admission in seen_admissions:
+                raise ValueError("Duplicate admission number within this CSV.")
+            if email and email in seen_emails:
+                raise ValueError("Duplicate institutional email within this CSV.")
+            if connection.execute(
+                "SELECT 1 FROM students WHERE student_number=?", (admission,)
+            ).fetchone():
+                raise ValueError("Admission number already exists in the registry.")
+            if email and connection.execute(
+                "SELECT 1 FROM student_profiles WHERE lower(institutional_email)=lower(?)",
+                (email,),
+            ).fetchone():
+                raise ValueError("Institutional email already exists in the registry.")
+            seen_admissions.add(admission)
+            if email:
+                seen_emails.add(email)
+            valid_rows.append(values)
+        except (ValueError, sqlite3.IntegrityError) as error:
+            row_errors.append({"row": row_number, "message": str(error)})
+    if not valid_rows and not row_errors:
+        row_errors.append({"row": 0, "message": "The CSV contains no student data rows."})
+    return valid_rows, row_errors
+
+
 @registry_bp.route("/students/import", methods=["GET", "POST"])
 def import_students():
     if request.method == "GET":
         return render_template("student_registry_import.html")
     upload = request.files.get("file")
-    if not upload or not upload.filename.lower().endswith(".csv"):
+    if not upload or not upload.filename or not upload.filename.lower().endswith(".csv"):
         return render_template("student_registry_import.html", error="Choose a CSV file.")
     raw = upload.read(2_000_001)
     if len(raw) > 2_000_000:
         return render_template("student_registry_import.html", error="CSV files must be 2 MB or smaller.")
+
+    connection = get_connection()
     try:
-        text = raw.decode("utf-8-sig")
-        reader = csv.DictReader(io.StringIO(text))
-        headers = {header.strip() for header in (reader.fieldnames or []) if header and header.strip()}
-        missing = CSV_FIELDS - headers
-        if missing:
-            return render_template("student_registry_import.html",
-                error="Missing CSV columns: " + ", ".join(sorted(missing)))
-        connection = get_connection()
-        imported = 0
-        rejected = 0
-        for row in reader:
-            connection.execute("SAVEPOINT student_import_row")
-            try:
-                normalized = {str(k).strip(): (v or "").strip() for k, v in row.items() if k}
-                values = _student_values(normalized)
-                _save_student(connection, values)
-                connection.execute("RELEASE SAVEPOINT student_import_row")
-                imported += 1
-            except (ValueError, sqlite3.IntegrityError):
-                connection.execute("ROLLBACK TO SAVEPOINT student_import_row")
-                connection.execute("RELEASE SAVEPOINT student_import_row")
-                rejected += 1
+        valid_rows, row_errors = _validate_student_csv(raw, connection)
+        if row_errors:
+            connection.rollback()
+            return render_template(
+                "student_registry_import.html",
+                error="No records were imported. Correct the reported rows and upload the complete file again.",
+                row_errors=row_errors,
+                valid_count=len(valid_rows),
+            )
+        for values in valid_rows:
+            student_id = _save_student(connection, values)
+            _record_audit(connection, "create", "student", student_id,
+                          "Student record created through the validated institutional CSV import.")
         _record_audit(connection, "import", "student_registry", None,
-                      f"CSV import processed: {imported} inserted; {rejected} skipped.")
+                      f"Validated CSV import completed: {len(valid_rows)} student record(s) created.")
         connection.commit()
-        connection.close()
-        flash(f"CSV import complete: {imported} record(s) imported; {rejected} row(s) skipped. Review the register before operational use.", "success")
+        flash(f"CSV import complete: {len(valid_rows)} student record(s) created. Review the register before operational use.", "success")
         return redirect(url_for("registry.students"))
-    except (UnicodeDecodeError, csv.Error):
+    except (ValueError, sqlite3.IntegrityError) as error:
+        connection.rollback()
         return render_template("student_registry_import.html",
-                               error="The file could not be read as a UTF-8 CSV. Export it as UTF-8 CSV and try again.")
+                               error=f"No records were imported. Import validation failed: {error}")
+    finally:
+        connection.close()
+
+
+HISTORY_EVENT_TYPES = {
+    "programme_change", "progression", "academic_status_change",
+    "deferment", "suspension", "graduation",
+}
+
+
+@registry_bp.route("/students/<int:student_id>/history", methods=["GET", "POST"])
+def academic_history(student_id):
+    """Registrar-managed, append-only academic history for one student."""
+    connection = get_connection()
+    student = connection.execute("""
+        SELECT s.id, s.student_number, s.first_name, s.last_name, s.course,
+               COALESCE(p.academic_status, 'active') AS academic_status
+        FROM students s LEFT JOIN student_profiles p ON p.student_id=s.id
+        WHERE s.id=?
+    """, (student_id,)).fetchone()
+    if not student:
+        connection.close()
+        from flask import abort
+        abort(404)
+
+    if request.method == "POST":
+        event_type = _clean(request.form.get("event_type"), 40).lower()
+        effective_date = _clean(request.form.get("effective_date"), 10)
+        previous_value = _clean(request.form.get("previous_value"), 240) or None
+        new_value = _clean(request.form.get("new_value"), 240) or None
+        reason = _clean(request.form.get("reason"), 1000)
+        try:
+            from datetime import date
+            date.fromisoformat(effective_date)
+        except (TypeError, ValueError):
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="Enter an effective date in YYYY-MM-DD format.")
+        if event_type not in HISTORY_EVENT_TYPES or len(reason) < 10:
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="Choose a valid history event and provide a reason of at least 10 characters.")
+        if event_type == "academic_status_change" and new_value not in ACADEMIC_STATUSES:
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="The new academic status must be an approved status value.")
+        try:
+            connection.execute("""
+                INSERT INTO academic_history_events
+                    (student_id,event_type,effective_date,previous_value,new_value,reason,recorded_by)
+                VALUES (?,?,?,?,?,?,?)
+            """, (student_id,event_type,effective_date,previous_value,new_value,reason,session["user_id"]))
+            if event_type == "academic_status_change":
+                connection.execute("""
+                    INSERT INTO student_profiles(student_id,academic_status,updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(student_id) DO UPDATE SET
+                      academic_status=excluded.academic_status, updated_at=CURRENT_TIMESTAMP
+                """, (student_id,new_value))
+            _record_audit(connection,"append","academic_history",student_id,
+                          f"Recorded {event_type} effective {effective_date}.")
+            connection.commit()
+            flash("Academic history event recorded. Existing history entries cannot be edited or deleted.", "success")
+            connection.close()
+            return redirect(url_for("registry.academic_history", student_id=student_id))
+        except sqlite3.IntegrityError:
+            connection.rollback()
+            connection.close()
+            return render_template("academic_history.html", student=student, events=[],
+                event_types=sorted(HISTORY_EVENT_TYPES),
+                error="The history event could not be recorded. Check the supplied details and try again.")
+
+    events = connection.execute("""
+        SELECT h.*, u.username AS recorded_by_username
+        FROM academic_history_events h JOIN users u ON u.id=h.recorded_by
+        WHERE h.student_id=?
+        ORDER BY h.effective_date DESC, h.id DESC
+    """, (student_id,)).fetchall()
+    connection.close()
+    return render_template("academic_history.html", student=student, events=events,
+                           event_types=sorted(HISTORY_EVENT_TYPES))

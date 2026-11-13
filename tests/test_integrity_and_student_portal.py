@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 import re
 
-from modules import institutional_registry, operations, integrity, student_portal
+from modules import institutional_registry, operations, integrity, student_portal, appeals
 
 
 class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
@@ -42,11 +42,13 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
             patch.object(operations, "DATABASE", self.path),
             patch.object(integrity, "DATABASE", self.path),
             patch.object(student_portal, "DATABASE", self.path),
+            patch.object(appeals, "DATABASE", self.path),
         ]
         for item in self.patches:
             item.start()
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
+        student_portal.SCHEMA_READY = False
         institutional_registry.ensure_schema()
         operations.ensure_schema()
         integrity.ensure_schema()
@@ -57,7 +59,105 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
             item.stop()
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
+        student_portal.SCHEMA_READY = False
         os.unlink(self.path)
+
+    def _seed_two_student_portal_records(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("ALTER TABLE examinations ADD COLUMN course_code TEXT")
+        connection.execute("ALTER TABLE examinations ADD COLUMN examination_name TEXT")
+        connection.execute("ALTER TABLE incidents ADD COLUMN reported_at TEXT")
+        connection.executemany("""
+            INSERT INTO students(id,student_number,first_name,last_name)
+            VALUES(?,?,?,?)
+        """, [
+            (1, "KSU/OWN/001", "Amina", "OwnRecord"),
+            (2, "KSU/OTHER/002", "Brian", "PrivateRecord"),
+        ])
+        connection.executemany("""
+            INSERT INTO student_portal_accounts
+                (student_id,password_hash,must_change_password,active)
+            VALUES(?,?,0,1)
+        """, [(1, "unused-test-hash-a"), (2, "unused-test-hash-b")])
+        connection.executemany("""
+            INSERT INTO incidents(id,student_id,incident_type,description,severity,status)
+            VALUES(?,?,?,?,?,?)
+        """, [
+            (1, 1, "Own case", "OWN-CASE-DETAIL", "low", "open"),
+            (2, 2, "Other case", "PRIVATE-CASE-DETAIL", "high", "open"),
+        ])
+        connection.executemany("""
+            INSERT INTO incident_case_workflow(incident_id,case_status,reported_by)
+            VALUES(?,?,?)
+        """, [(1, "student_response_requested", 10),
+              (2, "student_response_requested", 11)])
+        connection.commit()
+        connection.close()
+
+    def test_student_portal_discloses_only_authenticated_students_records(self):
+        from app import app as flask_app
+        self._seed_two_student_portal_records()
+        previous = {
+            "TESTING": flask_app.config.get("TESTING"),
+            "SECRET_KEY": flask_app.config.get("SECRET_KEY"),
+            "WTF_CSRF_ENABLED": flask_app.config.get("WTF_CSRF_ENABLED"),
+        }
+        try:
+            flask_app.config.update(
+                TESTING=True, SECRET_KEY="student-ownership-test", WTF_CSRF_ENABLED=False
+            )
+            client = flask_app.test_client()
+            with client.session_transaction() as state:
+                state.clear()
+                state["role"] = "student"
+                state["student_id"] = 1
+            response = client.get("/student/portal")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"KSU/OWN/001", response.data)
+            self.assertIn(b"OWN-CASE-DETAIL", response.data)
+            self.assertNotIn(b"KSU/OTHER/002", response.data)
+            self.assertNotIn(b"PRIVATE-CASE-DETAIL", response.data)
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    flask_app.config.pop(key, None)
+                else:
+                    flask_app.config[key] = value
+
+    def test_student_cannot_submit_response_to_another_students_incident(self):
+        from app import app as flask_app
+        self._seed_two_student_portal_records()
+        previous = {
+            "TESTING": flask_app.config.get("TESTING"),
+            "SECRET_KEY": flask_app.config.get("SECRET_KEY"),
+            "WTF_CSRF_ENABLED": flask_app.config.get("WTF_CSRF_ENABLED"),
+        }
+        try:
+            flask_app.config.update(
+                TESTING=True, SECRET_KEY="student-ownership-test", WTF_CSRF_ENABLED=False
+            )
+            client = flask_app.test_client()
+            with client.session_transaction() as state:
+                state.clear()
+                state["role"] = "student"
+                state["student_id"] = 1
+            response = client.post(
+                "/student/incidents/2/respond",
+                data={"response_text": "This unauthorized response must not be accepted for another student's incident."},
+            )
+            self.assertEqual(response.status_code, 403)
+            connection = sqlite3.connect(self.path)
+            count = connection.execute(
+                "SELECT COUNT(*) FROM incident_case_responses WHERE incident_id=2"
+            ).fetchone()[0]
+            connection.close()
+            self.assertEqual(count, 0)
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    flask_app.config.pop(key, None)
+                else:
+                    flask_app.config[key] = value
 
     def test_incident_reporter_cannot_review_own_case(self):
         from app import app as flask_app

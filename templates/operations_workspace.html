@@ -5,8 +5,9 @@
   <div><p class="eyebrow">INSTITUTIONAL OPERATIONS</p><h1>Academic operations</h1>
   <p class="muted">Manage academic units, enrolments, examination sessions and invigilator assignments.</p></div>
 </section>
-{% if is_admin %}
+{% if can_manage_academics or is_admin %}
 <div class="dashboard-grid" style="align-items:start">
+{% if can_manage_academics %}
   <section class="panel form-panel">
     <h2>Create academic unit</h2>
     <form method="post" action="{{ url_for('operations.create_unit') }}" class="stack-form">
@@ -27,6 +28,8 @@
       <button class="button button-primary" type="submit">Record enrolment</button>
     </form>
   </section>
+{% endif %}
+{% if is_admin %}
   <section class="panel form-panel">
     <h2>Register examination venue</h2>
     <form method="post" action="{{ url_for('operations.create_venue') }}" class="stack-form">
@@ -36,6 +39,18 @@
       <label>Capacity<input name="capacity" type="number" min="1" max="10000" required></label>
       <button class="button button-primary" type="submit">Save venue</button>
     </form>
+  </section>
+  <section class="panel form-panel">
+    <h2>Configure venue seat layout</h2>
+    <form method="post" action="{{ url_for('operations.configure_venue_layout') }}" class="stack-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Venue<select name="venue_id" required>{% for v in venues %}<option value="{{ v.id }}">{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} capacity)</option>{% endfor %}</select></label>
+      <label>Rows (A–Z)<input name="rows" type="number" min="1" max="26" required></label>
+      <label>Seats per row<input name="seats_per_row" type="number" min="1" max="100" required></label>
+      <label>Accessible seat labels (comma-separated)<input name="accessible_seats" placeholder="A-01,A-02"></label>
+      <button class="button button-primary" type="submit">Save seat layout</button>
+    </form>
+
   </section>
   <section class="panel form-panel">
     <h2>Create examination session</h2>
@@ -51,14 +66,15 @@
       <button class="button button-primary" type="submit">Create session and candidate list</button>
     </form>
   </section>
+{% endif %}
 </div>
 {% endif %}
 <section class="panel" style="margin-top:24px">
   <div class="panel-heading"><div><h2>Examination sessions</h2><p class="muted">Invigilators see only sessions assigned to their account.</p></div></div>
   {% if sessions %}
   <div class="table-wrap"><table><thead><tr><th>Session</th><th>Examination</th><th>Date & time</th><th>Venue</th><th>Candidates</th><th>Action</th></tr></thead><tbody>
-  {% for s in sessions %}<tr><td><strong>{{ s.session_code }}</strong><br><small>{{ s.academic_year }} · {{ s.semester }}</small></td><td>{{ s.course_code }}<br><small>{{ s.examination_name }}</small></td><td>{{ s.session_date }}<br>{{ s.start_time }}–{{ s.end_time }}</td><td>{{ s.venue_code or 'Not assigned' }}<br><small>{{ s.room_name or '' }}</small></td><td>{{ s.candidate_count }}<br><small>{{ s.status|title }}</small></td><td><a class="button button-secondary" href="{{ url_for('operations.attendance', session_id=s.id) }}">Open attendance</a> <a class="button button-secondary" href="{{ url_for('operations.export_attendance_csv', session_id=s.id) }}">Export CSV</a>
-  {% if is_admin %}<form method="post" action="{{ url_for('operations.update_session_status', session_id=s.id) }}" class="inline-form"><select name="status" aria-label="Session status"><option value="active" {% if s.status == 'active' %}selected{% endif %}>Activate</option><option value="completed">Complete</option><option value="cancelled">Cancel</option></select><button class="button button-secondary" type="submit">Update status</button></form><form method="post" action="{{ url_for('operations.refresh_candidates', session_id=s.id) }}"><button class="button button-secondary" type="submit">Refresh candidates</button></form><form method="post" action="{{ url_for('operations.assign_invigilator', session_id=s.id) }}" class="inline-form"><select name="invigilator_id" required aria-label="Invigilator">{% for i in invigilators %}<option value="{{ i.id }}">{{ i.employee_number }} — {{ i.first_name }} {{ i.last_name }}</option>{% endfor %}</select><button class="button button-secondary" type="submit">Assign</button></form>{% endif %}</td></tr>{% endfor %}
+  {% for s in sessions %}<tr><td><strong>{{ s.session_code }}</strong><br><small>{{ s.academic_year }} · {{ s.semester }}</small></td><td>{{ s.course_code }}<br><small>{{ s.examination_name }}</small></td><td>{{ s.session_date }}<br>{{ s.start_time }}–{{ s.end_time }}</td><td>{{ s.venue_code or 'Not assigned' }}<br><small>{{ s.room_name or '' }}</small></td><td>{{ s.candidate_count }}<br><small>{{ s.status|title }}</small></td><td><a class="button button-secondary" href="{{ url_for('operations.attendance', session_id=s.id) }}">Open attendance</a> <a class="button button-secondary" href="{{ url_for('identity.session_identity', session_id=s.id) }}">Identity review</a> <a class="button button-secondary" href="{{ url_for('operations.export_attendance_csv', session_id=s.id) }}">Export CSV</a>
+  {% if is_admin %}<form method="post" action="{{ url_for('operations.update_session_status', session_id=s.id) }}" class="inline-form"><select name="status" aria-label="Session status"><option value="active" {% if s.status == 'active' %}selected{% endif %}>Activate</option><option value="completed">Complete</option><option value="cancelled">Cancel</option></select><button class="button button-secondary" type="submit">Update status</button></form><form method="post" action="{{ url_for('operations.refresh_candidates', session_id=s.id) }}"><button class="button button-secondary" type="submit">Refresh candidates</button></form><form method="post" action="{{ url_for('operations.allocate_session_seats', session_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button-secondary" type="submit">Allocate seats</button></form><form method="post" action="{{ url_for('operations.assign_invigilator', session_id=s.id) }}" class="inline-form"><select name="invigilator_id" required aria-label="Invigilator">{% for i in invigilators %}<option value="{{ i.id }}">{{ i.employee_number }} — {{ i.first_name }} {{ i.last_name }}</option>{% endfor %}</select><button class="button button-secondary" type="submit">Assign</button></form>{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>
   {% else %}<p class="empty-state">No examination sessions have been created or assigned yet.</p>{% endif %}
 </section>

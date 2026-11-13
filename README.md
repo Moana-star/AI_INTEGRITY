@@ -2,11 +2,11 @@
 
 A developing Flask-based university examination operations platform with student registry, academic enrolment, examination sessions, attendance, student self-service, and evidence-controlled incident review workflows.
 
-**Project status:** Institutional development in progress; not production-ready  
-**Stack:** Python · Flask · SQLite · HTML · CSS · JavaScript  
+**Project status:** Operational application under PostgreSQL runtime validation; institutional production acceptance remains outstanding  
+**Stack:** Python · Flask · SQLite (local development) / PostgreSQL (runtime integration under test) · HTML · CSS · JavaScript  
 **Repository:** [Moana-star/AI_INTEGRITY](https://github.com/Moana-star/AI_INTEGRITY)
 
-> **Important:** This is an academic demonstration, not a production-ready institutional platform. Seeded records are synthetic. The review categories are rule-based indicators—not predictions, proof of misconduct, or automated disciplinary decisions. Do not enter real student or institutional data.
+> **Operational data policy:** Fresh database initialization is empty by default. No fictional students, examinations or incidents are inserted unless the explicit `--demo` option is used. Use institution-authorized records only in an approved environment. Production release remains gated on PostgreSQL runtime verification, security review, backup recovery and university approval. Incident review indicators are rule-based and are not proof of misconduct or automated disciplinary decisions.
 
 ## Contents
 
@@ -15,12 +15,17 @@ A developing Flask-based university examination operations platform with student
 - [Architecture](#architecture)
 - [Technology stack](#technology-stack)
 - [Setup and installation](#setup-and-installation)
-- [Demonstration accounts](#demonstration-accounts)
+- [Initial administrator provisioning](#initial-administrator-provisioning)
 - [Incident review categories](#incident-review-categories)
 - [Security and limitations](#security-and-limitations)
 - [Testing](#testing)
 - [Institutional development](#institutional-development)
 - [Production readiness](docs/PRODUCTION_READINESS.md)
+- [Kisii University examination policy mapping](docs/KISII_UNIVERSITY_POLICY_MAPPING.md)
+- [Kisii University integration readiness](docs/KISII_UNIVERSITY_INTEGRATION_READINESS.md)
+- [PostgreSQL migration and production runbook](docs/POSTGRESQL_MIGRATION_AND_PRODUCTION_RUNBOOK.md)
+- [Institutional integration and production acceptance](docs/INSTITUTIONAL_INTEGRATION_AND_PRODUCTION_ACCEPTANCE.md)
+- [Self-hosted PostgreSQL deployment](docs/SELF_HOSTED_DEPLOYMENT.md)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
@@ -32,13 +37,13 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 
 ## Features
 
-- **Role-aware sign-in:** administrator and invigilator accounts have different application areas.
-- **Invigilator registration:** self-registration is restricted to the invigilator role.
+- **Five-role access foundation:** administrator, registrar, examination officer, invigilator and student workflows use separate authentication and role checks. Staff accounts are provisioned by an administrator; public staff self-registration is disabled.
 - **Student management:** maintain student records used by examination and incident workflows.
 - **Institutional student registry (initial increment):** maintain admission-number-based profiles, academic placement, institutional contact fields, and academic status; import authorized UTF-8 CSV records.
-- **Academic operations:** create academic units, enrol active students, create examination sessions, derive candidate lists from enrolments, register venues, check venue capacity, and assign invigilators.
-- **Attendance:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, and audit events. Facial recognition is not enabled.
-- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, and incident-response submission when requested.
+- **Academic operations:** create academic units, enrol students, create examination sessions, derive candidate lists from enrolments, check venue capacity and timetable overlaps, and assign invigilators. A session cannot be activated without an active venue and at least two active invigilators.
+- **Kisii policy-gated eligibility:** versioned policy drafts, independent approval, evidence records for course registration, fees, lecture attendance and CAT participation. Missing evidence remains pending; attendance is not a substitute for eligibility.
+- **Attendance and identity:** session-level check-in/check-out using manual or student-card checks, duplicate-event prevention, seat labels, audit events and a preview-only camera interface. Live facial recognition is disabled.
+- **Student portal:** administrator-provisioned student access, forced temporary-password change, personal academic and examination views, incident responses, independent incident appeals and Senate verdict review requests within the recorded 21-day period.
 - **Incident investigations:** case workflow statuses, reviewer notes, restricted evidence uploads, SHA-256 checksums, and audited evidence downloads.
 - **Examination management:** manage examination details, schedules, venues, statuses, and invigilator assignments.
 - **Invigilator management:** maintain invigilator details and status.
@@ -46,7 +51,7 @@ The analysis feature applies explicit rules to recorded incident data. Despite t
 - **Incident review:** administrators can manage case workflow statuses, record review notes, and view student responses. Evidence files are stored outside the public static directory.
 - **Explainable incident analysis:** categorize recorded incident patterns using explicit rules and show a reason for each category.
 - **Dashboards and reports:** present examination, incident, and record summaries.
-- **Local persistence:** store application data in SQLite.
+- **Local persistence:** store development data in SQLite. Production startup is deliberately blocked until the PostgreSQL migration is complete and verified.
 
 ## Architecture
 
@@ -83,10 +88,14 @@ AI_INTEGRITY/
 ├── app.py                    # Flask routes and application logic
 ├── requirements.txt          # Python dependency declaration
 ├── database/
-│   └── database.py           # SQLite schema and demo-data seeding
+│   └── database.py           # Empty-first schema initialization; optional demo seeding
 ├── modules/
-│   ├── institutional_registry.py # Institutional student registry
+│   ├── access_control.py         # Staff role policy and migration
+│   ├── institutional_registry.py # Student registry and academic history
 │   ├── operations.py             # Academic units, sessions and attendance
+│   ├── eligibility.py            # Kisii policy and eligibility evidence
+│   ├── appeals.py                # Incident appeals and Senate reviews
+│   ├── identity_check.py         # Session identity and camera preview
 │   ├── integrity.py              # Incident case review and evidence
 │   └── student_portal.py         # Student self-service and responses
 ├── docs/
@@ -94,6 +103,9 @@ AI_INTEGRITY/
 │   ├── DATA_GOVERNANCE.md    # Privacy and biometric safeguards
 │   ├── INSTITUTIONAL_ROADMAP.md # Phased institutional development
 │   ├── PRODUCTION_READINESS.md # Go-live requirements and blockers
+│   ├── KISII_UNIVERSITY_POLICY_MAPPING.md # Public rule sources and policy mapping
+│   ├── KISII_UNIVERSITY_INTEGRATION_READINESS.md # SIS/SSO integration prerequisites
+│   ├── POSTGRESQL_MIGRATION_AND_PRODUCTION_RUNBOOK.md # Migration and release gates
 │   └── TESTING.md            # Automated and manual test guidance
 ├── tests/
 │   ├── test_institutional_registry.py
@@ -108,7 +120,7 @@ AI_INTEGRITY/
 └── .gitignore
 ```
 
-The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
+The SQLite database is generated locally during setup and is intentionally excluded from Git. Evidence files are stored under the ignored `instance/evidence/` directory and must not be committed.
 
 ## Technology stack
 
@@ -167,14 +179,14 @@ python -m pip install -r requirements.txt
 
 ### 4. Configure local environment variables
 
-Set a secret key and unique passwords for the optional demonstration accounts before initializing the database.
+Set a strong secret key and provision the first administrator using deployment-supplied credentials. These values must never be committed.
 
 **Windows PowerShell**
 
 ```powershell
 $env:FLASK_SECRET_KEY = (python -c "import secrets; print(secrets.token_hex(32))")
-$env:DEMO_ADMIN_PASSWORD = "Choose-A-Strong-Local-Password"
-$env:DEMO_INVIGILATOR_PASSWORD = "Choose-Another-Strong-Password"
+$env:EIMS_BOOTSTRAP_ADMIN_USERNAME = "eims-admin"
+$env:EIMS_BOOTSTRAP_ADMIN_PASSWORD = "Use-A-Unique-Password-At-Least-16-Chars"
 ```
 
 Replace the example passwords with strong, unique values. These variables apply only to the current terminal session. Never commit real credentials or secret keys.
@@ -187,16 +199,17 @@ From the repository root:
 python database/database.py
 ```
 
-The script creates the schema and inserts synthetic demonstration records in `database/exam_integrity.db`. The database file is excluded from version control.
+The script creates the core schema with no student, examination, attendance or incident records. If the bootstrap administrator variables are present, it creates that one administrator account. The database file is excluded from version control.
 
-**Existing database note:** Demo accounts are inserted only when their usernames do not already exist. If you need a fresh local demo database, back up anything you need first. The following command permanently deletes the local database and its contents before recreating it:
+**Existing database note:** Initialization is additive and does not delete existing records. Do not manually delete the database to reset a working institution's records. Back up the database and use a reviewed migration procedure for any reset or replacement.
+
+To create synthetic records for isolated development/testing only, run:
 
 ```powershell
-Remove-Item .\database\exam_integrity.db
-python database/database.py
+python database/database.py --demo
 ```
 
-Do not run this command if you need to preserve existing records.
+Never use the demo option for an institutional environment.
 
 ### 6. Start the application
 
@@ -215,18 +228,19 @@ python app.py
 
 Never enable Flask debug mode on a public or production deployment.
 
-## Demonstration accounts
+## Initial administrator provisioning
 
-If the corresponding environment variables are set **before** database initialization, the setup script creates:
+The default initialization does not create public demo accounts. To provision the first administrator, set `EIMS_BOOTSTRAP_ADMIN_USERNAME` and `EIMS_BOOTSTRAP_ADMIN_PASSWORD` securely before initialization. The password must be at least 16 characters. The bootstrap process refuses to overwrite an existing username; it is not a password-reset mechanism.
 
-| Role | Username | Password |
-|---|---|---|
-| Administrator | `admin` | Value assigned to `DEMO_ADMIN_PASSWORD` |
-| Invigilator | `jkamau` | Value assigned to `DEMO_INVIGILATOR_PASSWORD` |
+For local Windows PowerShell:
 
-Passwords are not stored in this repository. If these usernames already exist, `INSERT OR IGNORE` does not replace their existing passwords. Invigilators can also register through the registration page.
+```powershell
+$env:EIMS_BOOTSTRAP_ADMIN_USERNAME = "eims-admin"
+$env:EIMS_BOOTSTRAP_ADMIN_PASSWORD = "Your-Unique-Long-Secret-Here"
+python database/database.py
+```
 
-Use these accounts only in a local demonstration environment.
+After initialization, sign in using that administrator account and provision other institutional staff through the protected staff-account workflow. Deliver credentials only through the institution's approved secure channel. Do not share credentials in source control, screenshots or chat.
 
 ## Incident review categories
 
@@ -264,6 +278,10 @@ Automated tests run in GitHub Actions. The current verified application commit c
 See [docs/TESTING.md](docs/TESTING.md) and [the latest successful workflow](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43296018137).
 
 ## Institutional development
+
+The next completion increment is tracked in [pull request #2](https://github.com/Moana-star/AI_INTEGRITY/pull/2), stacked on the institutional foundation branch. It adds a fail-closed, provider-neutral one-to-one biometric verification boundary and a 12-workstream completion plan. It does **not** provide live camera capture or a configured biometric provider.
+
+See [Institutional completion plan](docs/INSTITUTIONAL_COMPLETION_PLAN.md). The completion branch passed 27 automated unit tests in [GitHub Actions](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43297620498); these tests do not establish production readiness.
 
 The institutional implementation is under review in [pull request #1](https://github.com/Moana-star/AI_INTEGRITY/pull/1). It has not been merged into `main`.
 

@@ -1,6 +1,6 @@
 """Operational academic, examination-session and attendance workflows.
 
-Uses the existing SQLite database for the current development increment.
+Uses the shared database adapter: SQLite for local development and PostgreSQL when DATABASE_URL is configured.
 No synthetic biometric result is generated. Attendance identity checks are
 manual or student-card checks until an institution approves and configures a
 separate biometric provider.
@@ -14,6 +14,7 @@ import re
 import sqlite3
 from datetime import date, datetime
 from flask import Blueprint, abort, flash, make_response, redirect, render_template, request, session, url_for
+from modules.database import get_connection, is_postgres
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.integrity import ensure_schema as ensure_integrity_schema
 
@@ -23,10 +24,7 @@ SCHEMA_READY = False
 
 
 def db():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 def ensure_schema():
@@ -75,7 +73,7 @@ def ensure_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
             student_id INTEGER NOT NULL,
-            eligibility_status TEXT NOT NULL DEFAULT 'eligible'
+            eligibility_status TEXT NOT NULL DEFAULT 'pending'
                 CHECK(eligibility_status IN ('eligible','pending','ineligible')),
             eligibility_note TEXT,
             seat_label TEXT,
@@ -89,7 +87,7 @@ def ensure_schema():
             session_id INTEGER NOT NULL,
             student_id INTEGER NOT NULL,
             event_type TEXT NOT NULL CHECK(event_type IN ('check_in','check_out')),
-            verification_method TEXT NOT NULL CHECK(verification_method IN ('manual','student_card')),
+            verification_method TEXT NOT NULL CHECK(verification_method IN ('manual','student_card','biometric')),
             verification_status TEXT NOT NULL CHECK(verification_status IN ('verified','manual_review')),
             recorded_by INTEGER NOT NULL,
             notes TEXT,
@@ -116,12 +114,158 @@ def ensure_schema():
             FOREIGN KEY(student_id) REFERENCES students(id),
             FOREIGN KEY(verified_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS venue_seats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venue_id INTEGER NOT NULL,
+            seat_label TEXT NOT NULL,
+            row_label TEXT NOT NULL,
+            seat_number INTEGER NOT NULL,
+            accessible INTEGER NOT NULL DEFAULT 0 CHECK(accessible IN (0,1)),
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            UNIQUE(venue_id,seat_label),
+            FOREIGN KEY(venue_id) REFERENCES venues(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS student_exam_accommodations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            academic_year TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            requires_accessible_seat INTEGER NOT NULL DEFAULT 0 CHECK(requires_accessible_seat IN (0,1)),
+            extra_time_minutes INTEGER NOT NULL DEFAULT 0 CHECK(extra_time_minutes BETWEEN 0 AND 240),
+            source_reference TEXT NOT NULL,
+            approved_by INTEGER NOT NULL,
+            approved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(student_id,academic_year,semester),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(approved_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS student_exam_accommodation_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            academic_year TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            requires_accessible_seat INTEGER NOT NULL,
+            extra_time_minutes INTEGER NOT NULL,
+            source_reference TEXT NOT NULL,
+            recorded_by INTEGER NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(recorded_by) REFERENCES users(id)
+        );
+        CREATE TRIGGER IF NOT EXISTS student_exam_accommodation_history_no_update
+        BEFORE UPDATE ON student_exam_accommodation_history
+        BEGIN SELECT RAISE(ABORT, 'Accommodation history is append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS student_exam_accommodation_history_no_delete
+        BEFORE DELETE ON student_exam_accommodation_history
+        BEGIN SELECT RAISE(ABORT, 'Accommodation history is append-only'); END;
+        CREATE TABLE IF NOT EXISTS session_seat_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            venue_seat_id INTEGER NOT NULL,
+            extra_time_minutes INTEGER NOT NULL DEFAULT 0 CHECK(extra_time_minutes BETWEEN 0 AND 240),
+            assigned_by INTEGER NOT NULL,
+            assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(session_id,student_id),
+            UNIQUE(session_id,venue_seat_id),
+            FOREIGN KEY(session_id) REFERENCES examination_sessions(id) ON DELETE CASCADE,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(venue_seat_id) REFERENCES venue_seats(id),
+            FOREIGN KEY(assigned_by) REFERENCES users(id)
+        );
         CREATE INDEX IF NOT EXISTS idx_candidates_session ON session_candidates(session_id);
         CREATE INDEX IF NOT EXISTS idx_attendance_session ON session_attendance(session_id);
         CREATE INDEX IF NOT EXISTS idx_exam_sessions_date ON examination_sessions(session_date);
     """)
+    # Upgrade legacy attendance event constraint to allow provider-backed biometric events.
+    # Preserve every existing event; no attendance history is discarded.
+    event_sql = None
+    if not is_postgres():
+        event_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_events'"
+        ).fetchone()
+    if event_sql and "'biometric'" not in (event_sql["sql"] or ""):
+        connection.commit()
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.executescript("""
+            ALTER TABLE attendance_events RENAME TO attendance_events_legacy;
+            CREATE TABLE attendance_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                student_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL CHECK(event_type IN ('check_in','check_out')),
+                verification_method TEXT NOT NULL CHECK(verification_method IN ('manual','student_card','biometric')),
+                verification_status TEXT NOT NULL CHECK(verification_status IN ('verified','manual_review')),
+                recorded_by INTEGER NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(session_id) REFERENCES examination_sessions(id),
+                FOREIGN KEY(student_id) REFERENCES students(id),
+                FOREIGN KEY(recorded_by) REFERENCES users(id)
+            );
+            INSERT INTO attendance_events
+            (id,session_id,student_id,event_type,verification_method,verification_status,recorded_by,notes,created_at)
+            SELECT id,session_id,student_id,event_type,verification_method,verification_status,recorded_by,notes,created_at
+            FROM attendance_events_legacy;
+            DROP TABLE attendance_events_legacy;
+            PRAGMA foreign_keys = ON;
+        """)
+    # Legacy candidates were marked eligible merely because they were enrolled.
+    # Require an explicit, current policy evaluation before attendance can be recorded.
+    connection.execute("""
+        UPDATE session_candidates
+        SET eligibility_status='pending',
+            eligibility_note='Awaiting evaluation under an effective, approved institutional eligibility policy.'
+        WHERE eligibility_status='eligible'
+          AND (eligibility_note IS NULL OR eligibility_note='')
+    """)
     connection.commit()
     connection.close()
+
+
+def build_venue_seats(row_count, seats_per_row, accessible_labels=()):
+    if type(row_count) is not int or not 1 <= row_count <= 26:
+        raise ValueError("Rows must be between 1 and 26.")
+    if type(seats_per_row) is not int or not 1 <= seats_per_row <= 100:
+        raise ValueError("Seats per row must be between 1 and 100.")
+    valid = set()
+    seats = []
+    for row_index in range(row_count):
+        row_label = chr(ord("A") + row_index)
+        for number in range(1, seats_per_row + 1):
+            label = f"{row_label}-{number:02d}"
+            valid.add(label)
+            seats.append((label,row_label,number,int(label in accessible_labels)))
+    if not set(accessible_labels).issubset(valid):
+        raise ValueError("An accessible seat label does not exist in the generated layout.")
+    return seats
+
+
+def session_activation_blockers(connection, session_id):
+    """Return hard blockers from the published minimum session controls."""
+    target = connection.execute("""
+        SELECT es.venue_id, v.active AS venue_active, v.capacity,
+               (SELECT COUNT(*) FROM session_candidates c WHERE c.session_id=es.id) AS candidates
+        FROM examination_sessions es
+        LEFT JOIN venues v ON v.id=es.venue_id
+        WHERE es.id=?
+    """, (session_id,)).fetchone()
+    if not target:
+        return ["The examination session does not exist."]
+    blockers = []
+    if target["venue_id"] is None or not target["venue_active"]:
+        blockers.append("An active examination venue must be assigned before activation.")
+    elif target["candidates"] > target["capacity"]:
+        blockers.append("Candidate count exceeds the assigned venue capacity.")
+    assigned = connection.execute("""
+        SELECT COUNT(DISTINCT si.invigilator_id)
+        FROM session_invigilators si
+        JOIN invigilators i ON i.id=si.invigilator_id
+        WHERE si.session_id=? AND i.status='active'
+    """, (session_id,)).fetchone()[0]
+    if assigned < 2:
+        blockers.append("At least two active invigilators must be assigned before activation.")
+    return blockers
 
 
 def _audit(connection, action, entity, entity_id, summary):
@@ -132,11 +276,15 @@ def _audit(connection, action, entity, entity_id, summary):
 
 
 def _require_admin():
-    return "user_id" in session and session.get("role") == "admin"
+    return "user_id" in session and session.get("role") in {"admin", "examination_officer"}
+
+
+def _require_registrar():
+    return "user_id" in session and session.get("role") in {"admin", "registrar"}
 
 
 def _require_staff():
-    return "user_id" in session and session.get("role") in {"admin", "invigilator"}
+    return "user_id" in session and session.get("role") in {"admin", "registrar", "examination_officer", "invigilator"}
 
 
 @operations_bp.before_request
@@ -154,16 +302,6 @@ def prepare():
 @operations_bp.get("/")
 def workspace():
     connection = db()
-    units = connection.execute("SELECT * FROM academic_units ORDER BY unit_code").fetchall()
-    students = connection.execute("""
-        SELECT s.id, s.student_number, s.first_name, s.last_name, s.course
-        FROM students s ORDER BY s.student_number
-    """).fetchall()
-    venues = connection.execute("SELECT * FROM venues WHERE active=1 ORDER BY venue_code").fetchall()
-    invigilators = connection.execute("""
-        SELECT id, employee_number, first_name, last_name
-        FROM invigilators WHERE status='active' ORDER BY employee_number
-    """).fetchall()
     session_sql = """
         SELECT es.*, e.course_code, e.examination_name, v.venue_code, v.room_name,
                (SELECT COUNT(*) FROM session_candidates c WHERE c.session_id=es.id) AS candidate_count
@@ -171,25 +309,69 @@ def workspace():
         JOIN examinations e ON e.id=es.examination_id
         LEFT JOIN venues v ON v.id=es.venue_id
     """
-    if _require_admin():
-        sessions = connection.execute(session_sql + " ORDER BY es.session_date DESC, es.start_time DESC").fetchall()
-    else:
+    if session.get("role") == "invigilator":
+        # An invigilator sees only the sessions assigned to their own staff record,
+        # and only the candidates/units/venues connected to those sessions.
+        uid = (session["user_id"],)
         sessions = connection.execute(session_sql + """
             JOIN session_invigilators si ON si.session_id=es.id
             JOIN invigilators i ON i.id=si.invigilator_id
             WHERE i.user_id=?
             ORDER BY es.session_date DESC, es.start_time DESC
-        """, (session.get("user_id"),)).fetchall()
-    exams = connection.execute("SELECT id, course_code, examination_name FROM examinations ORDER BY examination_date DESC").fetchall()
+        """, uid).fetchall()
+        students = connection.execute("""
+            SELECT DISTINCT s.id,s.student_number,s.first_name,s.last_name,s.course
+            FROM students s JOIN session_candidates c ON c.student_id=s.id
+            JOIN examination_sessions es ON es.id=c.session_id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY s.student_number
+        """, uid).fetchall()
+        units = connection.execute("""
+            SELECT DISTINCT u.* FROM academic_units u
+            JOIN examination_sessions es ON es.unit_id=u.id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY u.unit_code
+        """, uid).fetchall()
+        venues = connection.execute("""
+            SELECT DISTINCT v.* FROM venues v
+            JOIN examination_sessions es ON es.venue_id=v.id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY v.venue_code
+        """, uid).fetchall()
+        invigilators = []
+        exams = connection.execute("""
+            SELECT DISTINCT e.id,e.course_code,e.examination_name
+            FROM examinations e JOIN examination_sessions es ON es.examination_id=e.id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY e.examination_name
+        """, uid).fetchall()
+    else:
+        units = connection.execute("SELECT * FROM academic_units ORDER BY unit_code").fetchall()
+        students = connection.execute("""
+            SELECT s.id, s.student_number, s.first_name, s.last_name, s.course
+            FROM students s ORDER BY s.student_number
+        """).fetchall()
+        venues = connection.execute("SELECT * FROM venues WHERE active=1 ORDER BY venue_code").fetchall()
+        invigilators = connection.execute("""
+            SELECT id, employee_number, first_name, last_name
+            FROM invigilators WHERE status='active' ORDER BY employee_number
+        """).fetchall()
+        sessions = connection.execute(session_sql + " ORDER BY es.session_date DESC, es.start_time DESC").fetchall()
+        exams = connection.execute("SELECT id, course_code, examination_name FROM examinations ORDER BY examination_date DESC").fetchall()
     connection.close()
     return render_template("operations_workspace.html", units=units, students=students,
                            venues=venues, invigilators=invigilators, sessions=sessions,
-                           exams=exams, today=date.today().isoformat(), is_admin=_require_admin())
+                           exams=exams, today=date.today().isoformat(),
+                           is_admin=_require_admin(), can_manage_academics=_require_registrar())
 
 
 @operations_bp.post("/units")
 def create_unit():
-    if not _require_admin():
+    if not _require_registrar():
         return redirect(url_for("login"))
     code = (request.form.get("unit_code") or "").strip().upper()
     name = " ".join((request.form.get("unit_name") or "").split())
@@ -217,7 +399,7 @@ def create_unit():
 
 @operations_bp.post("/enrolments")
 def enrol_student():
-    if not _require_admin():
+    if not _require_registrar():
         return redirect(url_for("login"))
     try:
         student_id = int(request.form.get("student_id", ""))
@@ -288,6 +470,151 @@ def create_venue():
     return redirect(url_for("operations.workspace"))
 
 
+@operations_bp.post("/venues/layout")
+def configure_venue_layout():
+    if not _require_admin():
+        abort(403)
+    try:
+        venue_id = int(request.form.get("venue_id", ""))
+        rows = int(request.form.get("rows", ""))
+        seats_per_row = int(request.form.get("seats_per_row", ""))
+    except (TypeError, ValueError):
+        flash("Enter valid row and seat counts.", "error")
+        return redirect(url_for("operations.workspace"))
+    accessible = {item.strip().upper() for item in (request.form.get("accessible_seats") or "").split(",") if item.strip()}
+    try:
+        seats = build_venue_seats(rows,seats_per_row,accessible)
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(url_for("operations.workspace"))
+    connection = db()
+    venue = connection.execute("SELECT capacity FROM venues WHERE id=? AND active=1",(venue_id,)).fetchone()
+    used = connection.execute("""
+        SELECT 1 FROM session_seat_assignments a
+        JOIN examination_sessions s ON s.id=a.session_id
+        WHERE s.venue_id=? LIMIT 1
+    """,(venue_id,)).fetchone()
+    if not venue or len(seats)>venue["capacity"] or used:
+        connection.close()
+        flash("The venue must be active, the layout cannot exceed its capacity, and an allocated layout cannot be replaced.", "error")
+        return redirect(url_for("operations.workspace"))
+    connection.execute("DELETE FROM venue_seats WHERE venue_id=?",(venue_id,))
+    connection.executemany("""
+        INSERT INTO venue_seats(venue_id,seat_label,row_label,seat_number,accessible)
+        VALUES(?,?,?,?,?)
+    """,[(venue_id,*seat) for seat in seats])
+    _audit(connection,"configure_layout","venue",venue_id,
+           f"Configured {rows} rows and {seats_per_row} seats per row; accessible seat count {len(accessible)}.")
+    connection.commit()
+    connection.close()
+    flash(f"Venue layout saved with {len(seats)} seats.", "success")
+    return redirect(url_for("operations.workspace"))
+
+
+@operations_bp.post("/students/<int:student_id>/accommodations")
+def record_exam_accommodation(student_id):
+    if session.get("role") not in {"admin","registrar"}:
+        abort(403)
+    year = " ".join((request.form.get("academic_year") or "").split())[:20]
+    semester = " ".join((request.form.get("semester") or "").split())[:40]
+    reference = " ".join((request.form.get("source_reference") or "").split())[:500]
+    accessible = request.form.get("requires_accessible_seat") == "on"
+    try:
+        extra = int(request.form.get("extra_time_minutes","0"))
+    except ValueError:
+        extra = -1
+    if not year or not semester or len(reference)<8 or not 0<=extra<=240:
+        flash("Provide the academic period, official accommodation reference and valid extra time.", "error")
+        return redirect(url_for("registry.students"))
+    connection=db()
+    if not connection.execute("SELECT 1 FROM students WHERE id=?",(student_id,)).fetchone():
+        connection.close()
+        abort(404)
+    connection.execute("""
+        INSERT INTO student_exam_accommodation_history
+            (student_id,academic_year,semester,requires_accessible_seat,extra_time_minutes,source_reference,recorded_by)
+        VALUES(?,?,?,?,?,?,?)
+    """,(student_id,year,semester,int(accessible),extra,reference,session["user_id"]))
+    connection.execute("""
+        INSERT INTO student_exam_accommodations
+            (student_id,academic_year,semester,requires_accessible_seat,extra_time_minutes,source_reference,approved_by)
+        VALUES(?,?,?,?,?,?,?)
+        ON CONFLICT(student_id,academic_year,semester) DO UPDATE SET
+            requires_accessible_seat=excluded.requires_accessible_seat,
+            extra_time_minutes=excluded.extra_time_minutes,
+            source_reference=excluded.source_reference,
+            approved_by=excluded.approved_by,approved_at=CURRENT_TIMESTAMP
+    """,(student_id,year,semester,int(accessible),extra,reference,session["user_id"]))
+    _audit(connection,"record_accommodation","student",student_id,
+           "Recorded approved exam accommodation flags with an official source reference; no diagnosis is stored.")
+    connection.commit()
+    connection.close()
+    flash("Exam accommodation recorded.", "success")
+    return redirect(url_for("registry.students"))
+
+
+@operations_bp.post("/sessions/<int:session_id>/allocate-seats")
+def allocate_session_seats(session_id):
+    if not _require_admin():
+        abort(403)
+    connection=db()
+    target=connection.execute("""
+        SELECT id,venue_id,academic_year,semester,status
+        FROM examination_sessions WHERE id=?
+    """,(session_id,)).fetchone()
+    if not target or not target["venue_id"] or target["status"] not in {"scheduled"}:
+        connection.close()
+        flash("Seat allocation requires a scheduled session with an assigned venue.", "error")
+        return redirect(url_for("operations.workspace"))
+    if connection.execute("SELECT 1 FROM session_seat_assignments WHERE session_id=? LIMIT 1",(session_id,)).fetchone():
+        connection.close()
+        flash("This session already has seat assignments. Use a formal rescheduling workflow rather than overwriting them.", "error")
+        return redirect(url_for("operations.workspace"))
+    candidates=connection.execute("""
+        SELECT c.student_id,
+               COALESCE(a.requires_accessible_seat,0) AS requires_accessible_seat,
+               COALESCE(a.extra_time_minutes,0) AS extra_time_minutes
+        FROM session_candidates c
+        LEFT JOIN student_exam_accommodations a
+          ON a.student_id=c.student_id AND a.academic_year=? AND a.semester=?
+        WHERE c.session_id=?
+        ORDER BY COALESCE(a.requires_accessible_seat,0) DESC,c.student_id
+    """,(target["academic_year"],target["semester"],session_id)).fetchall()
+    seats=connection.execute("""
+        SELECT * FROM venue_seats WHERE venue_id=? AND active=1
+        ORDER BY accessible DESC,row_label,seat_number
+    """,(target["venue_id"],)).fetchall()
+    accessible_needed=sum(1 for item in candidates if item["requires_accessible_seat"])
+    accessible_available=sum(1 for item in seats if item["accessible"])
+    if len(seats)<len(candidates) or accessible_available<accessible_needed:
+        connection.close()
+        flash("Seat allocation blocked: configure enough active seats and accessible seats for approved accommodations.", "error")
+        return redirect(url_for("operations.workspace"))
+    accessible_seats=[seat for seat in seats if seat["accessible"]]
+    standard_seats=[seat for seat in seats if not seat["accessible"]]
+    assignments=[]
+    for candidate in candidates:
+        pool=accessible_seats if candidate["requires_accessible_seat"] else standard_seats
+        if not pool:
+            pool=accessible_seats
+        seat=pool.pop(0)
+        assignments.append((session_id,candidate["student_id"],seat["id"],candidate["extra_time_minutes"],session["user_id"],seat["seat_label"]))
+    for sid,student_id,seat_id,extra_time,actor,label in assignments:
+        connection.execute("""
+            INSERT INTO session_seat_assignments
+                (session_id,student_id,venue_seat_id,extra_time_minutes,assigned_by)
+            VALUES(?,?,?,?,?)
+        """,(sid,student_id,seat_id,extra_time,actor))
+        connection.execute("UPDATE session_candidates SET seat_label=? WHERE session_id=? AND student_id=?",
+                           (label,sid,student_id))
+    _audit(connection,"allocate_seats","examination_session",session_id,
+           f"Allocated {len(assignments)} seats, including {accessible_needed} approved accessible accommodations.")
+    connection.commit()
+    connection.close()
+    flash(f"Allocated {len(assignments)} seats with approved accessible seating.", "success")
+    return redirect(url_for("operations.workspace"))
+
+
 @operations_bp.post("/sessions")
 def create_session():
     if not _require_admin():
@@ -352,8 +679,9 @@ def create_session():
             """, (unit_id, year, semester)).fetchall()
             for seat_number, candidate in enumerate(candidates, start=1):
                 connection.execute("""
-                    INSERT INTO session_candidates(session_id, student_id, eligibility_status, seat_label)
-                    VALUES (?, ?, 'eligible', ?)
+                    INSERT INTO session_candidates
+                        (session_id,student_id,eligibility_status,eligibility_note,seat_label)
+                    VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.',?)
                 """, (session_id, candidate["student_id"], f"SEAT-{seat_number:03d}"))
         candidate_count = len(candidates)
         if candidates:
@@ -382,7 +710,7 @@ def create_session():
         _audit(connection, "create", "examination_session", session_id,
                f"Created examination session {code}; candidate list derived from registered enrolments.")
         connection.commit()
-        flash(f"Examination session created with {candidate_count} eligible candidate(s).", "success")
+        flash(f"Examination session created with {candidate_count} candidate(s) awaiting approved eligibility evaluation.", "success")
     except sqlite3.IntegrityError:
         connection.rollback()
         flash("Session code already exists or the session conflicts with a database constraint.", "error")
@@ -451,6 +779,12 @@ def update_session_status(session_id):
         connection.close()
         flash("A completed or cancelled session cannot be reopened or changed.", "error")
         return redirect(url_for("operations.workspace"))
+    if new_status == "active":
+        blockers = session_activation_blockers(connection, session_id)
+        if blockers:
+            connection.close()
+            flash("Session activation blocked: " + " ".join(blockers), "error")
+            return redirect(url_for("operations.workspace"))
     connection.execute("UPDATE examination_sessions SET status=? WHERE id=?", (new_status, session_id))
     _audit(connection, "status_change", "examination_session", session_id,
            f"Session status changed from {current['status']} to {new_status}.")
@@ -462,6 +796,8 @@ def update_session_status(session_id):
 
 @operations_bp.get("/sessions/<int:session_id>/attendance")
 def attendance(session_id):
+    if session.get("role") not in {"admin","examination_officer","invigilator"}:
+        abort(403)
     connection = db()
     session_row = connection.execute("""
         SELECT es.*, e.course_code, e.examination_name, v.venue_code, v.room_name
@@ -485,8 +821,10 @@ def attendance(session_id):
     candidates = connection.execute("""
         SELECT c.student_id, c.eligibility_status, c.eligibility_note, c.seat_label,
                s.student_number, s.first_name, s.last_name, a.status, a.check_in_at,
-               a.check_out_at, a.verification_method, a.verification_status
+               a.check_out_at, a.verification_method, a.verification_status,
+               COALESCE(sa.extra_time_minutes,0) AS extra_time_minutes
         FROM session_candidates c JOIN students s ON s.id=c.student_id
+        LEFT JOIN session_seat_assignments sa ON sa.session_id=c.session_id AND sa.student_id=c.student_id
         LEFT JOIN session_attendance a ON a.session_id=c.session_id AND a.student_id=c.student_id
         WHERE c.session_id=? ORDER BY s.student_number
     """, (session_id,)).fetchall()
@@ -496,8 +834,8 @@ def attendance(session_id):
 
 @operations_bp.post("/sessions/<int:session_id>/attendance/<int:student_id>")
 def record_attendance(session_id, student_id):
-    if not _require_staff():
-        return redirect(url_for("login"))
+    if session.get("role") not in {"admin","examination_officer","invigilator"}:
+        abort(403)
     connection = db()
     session_row = connection.execute("SELECT * FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
     if not session_row:
@@ -614,8 +952,8 @@ def set_attendance_exception(session_id, student_id):
 
 @operations_bp.post("/sessions/<int:session_id>/candidates/<int:student_id>/incidents")
 def report_session_incident(session_id, student_id):
-    if not _require_staff():
-        return redirect(url_for("login"))
+    if session.get("role") not in {"admin", "examination_officer", "invigilator"}:
+        abort(403)
     connection = db()
     session_row = connection.execute("SELECT * FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
     if not session_row or session_row["status"] not in {"scheduled", "active"}:
@@ -682,18 +1020,26 @@ def refresh_candidates(session_id):
           AND e.enrolment_status='registered'
           AND COALESCE(p.academic_status,'active')='active'
     """, (session_row["unit_id"], session_row["academic_year"], session_row["semester"])).fetchall()
+    # Refresh invalidates prior eligibility decisions for this scheduled session.
+    # A fresh, effective policy evaluation is required before attendance resumes.
+    connection.execute("""
+        UPDATE session_candidates SET eligibility_status='pending',
+            eligibility_note='Candidate list refreshed; reevaluation under the current approved policy is required.'
+        WHERE session_id=?
+    """, (session_id,))
     added = 0
     for candidate in candidates:
         cursor = connection.execute("""
-            INSERT OR IGNORE INTO session_candidates(session_id, student_id, eligibility_status)
-            VALUES (?, ?, 'eligible')
+            INSERT OR IGNORE INTO session_candidates
+                (session_id,student_id,eligibility_status,eligibility_note)
+            VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.')
         """, (session_id, candidate["student_id"]))
         added += cursor.rowcount
     _audit(connection, "refresh_candidates", "examination_session", session_id,
-           f"Added {added} eligible candidates from current enrolments.")
+           f"Refreshed candidate list; {added} new candidates added and all candidates require fresh eligibility evaluation.")
     connection.commit()
     connection.close()
-    flash(f"Candidate list refreshed. {added} new eligible candidate(s) added.", "success")
+    flash(f"Candidate list refreshed. {added} new candidate(s) added; all candidates now require fresh eligibility evaluation.", "success")
     return redirect(url_for("operations.workspace"))
 
 @operations_bp.get("/sessions/<int:session_id>/attendance.csv")
