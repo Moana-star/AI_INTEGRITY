@@ -171,7 +171,7 @@ class InstitutionalRegistryTests(unittest.TestCase):
             "department":"Computer Science","institutional_email":"test001@example.edu",
             "phone":"","academic_status":"active","academic_year":"2026/2027","semester":"Semester 1"
         }
-        raw = (headers + "\\n" + ",".join(row.get(key, "") for key in sorted(registry.CSV_FIELDS))).encode()
+        raw = (headers + "\n" + ",".join(row.get(key, "") for key in sorted(registry.CSV_FIELDS))).encode()
         connection = registry.get_connection()
         valid, errors = registry._validate_student_csv(raw, connection)
         count = connection.execute("SELECT COUNT(*) FROM students").fetchone()[0]
@@ -186,8 +186,8 @@ class InstitutionalRegistryTests(unittest.TestCase):
         first.update({"admission_number":"CSV/002","first_name":"Test","last_name":"One","course":"Computing","academic_status":"active"})
         second = dict(first)
         second.update({"first_name":"Test","last_name":"Two"})
-        raw = (",".join(headers) + "\\n" +
-               ",".join(first[key] for key in headers) + "\\n" +
+        raw = (",".join(headers) + "\n" +
+               ",".join(first[key] for key in headers) + "\n" +
                ",".join(second[key] for key in headers)).encode()
         connection = registry.get_connection()
         valid, errors = registry._validate_student_csv(raw, connection)
@@ -206,7 +206,7 @@ class InstitutionalRegistryTests(unittest.TestCase):
         headers = sorted(registry.CSV_FIELDS)
         row = {key:"" for key in headers}
         row.update({"admission_number":"CSV/003","first_name":"New","last_name":"Student","course":"Computing","academic_status":"active"})
-        raw = (",".join(headers) + "\\n" + ",".join(row[key] for key in headers)).encode()
+        raw = (",".join(headers) + "\n" + ",".join(row[key] for key in headers)).encode()
         valid, errors = registry._validate_student_csv(raw, connection)
         connection.close()
         self.assertEqual(valid, [])
