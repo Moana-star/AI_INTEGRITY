@@ -292,10 +292,12 @@ def admin_dashboard():
     if not admin_required():
         return redirect(url_for("login"))
 
+    from modules.examination_definitions import ensure_schema as ensure_examination_definition_schema
+    ensure_examination_definition_schema()
     connection = get_db_connection()
 
     total_students = connection.execute("SELECT COUNT(*) AS total FROM students").fetchone()["total"]
-    total_examinations = connection.execute("SELECT COUNT(*) AS total FROM examinations").fetchone()["total"]
+    total_examinations = connection.execute("SELECT COUNT(*) AS total FROM examinations WHERE definition_status='active'").fetchone()["total"]
     total_invigilators = connection.execute("SELECT COUNT(*) AS total FROM invigilators").fetchone()["total"]
     open_incidents = connection.execute(
         "SELECT COUNT(*) AS total FROM incidents WHERE status = 'open'"
@@ -307,14 +309,29 @@ def admin_dashboard():
         "SELECT COUNT(*) AS total FROM incidents WHERE severity = 'high'"
     ).fetchone()["total"]
     examination_statuses = {row["status"]: row["total"] for row in connection.execute(
-        "SELECT status, COUNT(*) AS total FROM examinations GROUP BY status"
+        """SELECT CASE status WHEN 'active' THEN 'ongoing' ELSE status END AS status,
+                  COUNT(*) AS total
+           FROM examination_sessions
+           GROUP BY CASE status WHEN 'active' THEN 'ongoing' ELSE status END"""
     ).fetchall()}
     flagged_students, risk_summary = get_student_risk_records(connection)
 
     examinations = connection.execute(
-        """SELECT examinations.*, invigilators.first_name AS inv_first, invigilators.last_name AS inv_last
-           FROM examinations LEFT JOIN invigilators ON examinations.invigilator_id = invigilators.id
-           ORDER BY CASE examinations.status WHEN 'ongoing' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END, examinations.examination_date, examinations.start_time LIMIT 8"""
+        """SELECT es.id, e.course_code, e.examination_name,
+                  es.session_date AS examination_date, es.start_time, es.end_time,
+                  v.room_name AS venue,
+                  (SELECT i.first_name FROM session_invigilators si
+                   JOIN invigilators i ON i.id=si.invigilator_id
+                   WHERE si.session_id=es.id ORDER BY si.id LIMIT 1) AS inv_first,
+                  (SELECT i.last_name FROM session_invigilators si
+                   JOIN invigilators i ON i.id=si.invigilator_id
+                   WHERE si.session_id=es.id ORDER BY si.id LIMIT 1) AS inv_last,
+                  CASE es.status WHEN 'active' THEN 'ongoing' ELSE es.status END AS status
+           FROM examination_sessions es
+           JOIN examinations e ON e.id=es.examination_id
+           LEFT JOIN venues v ON v.id=es.venue_id
+           ORDER BY CASE es.status WHEN 'active' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+                    es.session_date, es.start_time LIMIT 8"""
     ).fetchall()
 
     incidents = connection.execute("""
@@ -753,6 +770,8 @@ def admin_reports():
     if not admin_required():
         return redirect(url_for("login"))
 
+    from modules.examination_definitions import ensure_schema as ensure_examination_definition_schema
+    ensure_examination_definition_schema()
     connection = get_db_connection()
 
     by_severity = connection.execute("""
@@ -772,7 +791,10 @@ def admin_reports():
     """).fetchall()
 
     examination_summary = {row["status"]: row["total"] for row in connection.execute(
-        "SELECT status, COUNT(*) AS total FROM examinations GROUP BY status"
+        """SELECT CASE status WHEN 'active' THEN 'ongoing' ELSE status END AS status,
+                  COUNT(*) AS total
+           FROM examination_sessions
+           GROUP BY CASE status WHEN 'active' THEN 'ongoing' ELSE status END"""
     ).fetchall()}
     invigilator_summary = {row["status"]: row["total"] for row in connection.execute(
         "SELECT status, COUNT(*) AS total FROM invigilators GROUP BY status"
