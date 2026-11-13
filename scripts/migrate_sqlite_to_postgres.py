@@ -12,6 +12,7 @@ import argparse
 import os
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 
 from sqlalchemy import MetaData, create_engine, func, inspect, select, text
@@ -29,6 +30,29 @@ IMMUTABLE_HISTORY_TABLES = {
     "academic_history_events",
 }
 EXPECTED_TRIGGER_TABLES = IMMUTABLE_HISTORY_TABLES
+
+
+def create_consistent_snapshot(source_path: Path) -> Path:
+    """Use SQLite's online backup API to freeze one consistent source snapshot."""
+    if not source_path.is_file():
+        raise RuntimeError(f"SQLite source database does not exist: {source_path}")
+    handle = tempfile.NamedTemporaryFile(prefix="eims-migration-", suffix=".sqlite3", delete=False)
+    snapshot_path = Path(handle.name)
+    handle.close()
+    source = sqlite3.connect(
+        f"file:{source_path.resolve().as_posix()}?mode=ro", uri=True
+    )
+    destination = sqlite3.connect(snapshot_path)
+    try:
+        source.backup(destination)
+    except Exception:
+        destination.close()
+        source.close()
+        snapshot_path.unlink(missing_ok=True)
+        raise
+    destination.close()
+    source.close()
+    return snapshot_path
 
 
 def validate_source(source_path: Path):
@@ -186,18 +210,22 @@ def reset_identity_sequences(connection, metadata: MetaData):
 
 
 def migrate(source_path: Path, database_url: str, apply: bool, confirm_empty: bool):
-    source_tables, source_triggers = validate_source(source_path)
-    source_engine = create_engine(f"sqlite:///{source_path.resolve().as_posix()}")
-    if database_url.startswith("postgres://"):
-        database_url = "postgresql+psycopg://" + database_url[len("postgres://"):]
-    elif database_url.startswith("postgresql://"):
-        database_url = "postgresql+psycopg://" + database_url[len("postgresql://"):]
-    target_engine = create_engine(database_url, pool_pre_ping=True)
-
+    snapshot_path = create_consistent_snapshot(source_path)
+    source_engine = None
+    target_engine = None
     try:
+        source_tables, source_triggers = validate_source(snapshot_path)
+        source_engine = create_engine(f"sqlite:///{snapshot_path.resolve().as_posix()}")
+        if database_url.startswith("postgres://"):
+            database_url = "postgresql+psycopg://" + database_url[len("postgres://"):]
+        elif database_url.startswith("postgresql://"):
+            database_url = "postgresql+psycopg://" + database_url[len("postgresql://"):]
+        target_engine = create_engine(database_url, pool_pre_ping=True)
+
         source_metadata = MetaData()
         source_metadata.reflect(bind=source_engine, only=source_tables)
         counts = table_counts(source_engine, source_tables)
+        print(f"Consistent SQLite snapshot: {snapshot_path.name}")
         print(f"Source tables: {len(source_tables)}")
         print(f"Source rows: {sum(counts.values())}")
         for name, count in counts.items():
@@ -245,8 +273,11 @@ def migrate(source_path: Path, database_url: str, apply: bool, confirm_empty: bo
         print("Migration copy committed and row counts matched inside the transaction.")
         print("Run application-level PostgreSQL integration tests before any cutover.")
     finally:
-        source_engine.dispose()
-        target_engine.dispose()
+        if source_engine is not None:
+            source_engine.dispose()
+        if target_engine is not None:
+            target_engine.dispose()
+        snapshot_path.unlink(missing_ok=True)
 
 
 def main():
