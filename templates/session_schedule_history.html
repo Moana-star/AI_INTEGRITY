@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Schedule history | EIMS{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="eyebrow">EXAMINATION OPERATIONS · AUDIT HISTORY</p>
+    <h1>Schedule history</h1>
+    <p class="muted">{{ exam_session.course_code }} — {{ exam_session.examination_name }} · {{ exam_session.session_code }}</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('operations.workspace') }}">Back to operations</a>
+</section>
+<section class="panel">
+  <h2>Current schedule</h2>
+  <p><strong>{{ exam_session.session_date }}</strong> · {{ exam_session.start_time }}–{{ exam_session.end_time }} · {{ exam_session.status|title }}</p>
+</section>
+<section class="panel" style="margin-top:20px">
+  <h2>Recorded changes</h2>
+  {% if history %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Recorded</th><th>Action</th><th>Previous schedule</th><th>New schedule</th><th>Reason</th><th>Recorded by</th></tr></thead>
+      <tbody>
+      {% for item in history %}
+      <tr>
+        <td>{{ item.created_at }}</td>
+        <td>{{ item.action|title }}</td>
+        <td>{{ item.old_session_date }}<br>{{ item.old_start_time }}–{{ item.old_end_time }}<br><small>{{ item.old_venue_code or 'No venue' }}</small></td>
+        <td>{{ item.new_session_date }}<br>{{ item.new_start_time }}–{{ item.new_end_time }}<br><small>{{ item.new_venue_code or 'No venue' }}</small></td>
+        <td>{{ item.reason }}</td>
+        <td>{{ item.actor_username or ('User ID ' ~ item.actor_user_id) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-state">No rescheduling or cancellation events have been recorded for this session.</p>
+  {% endif %}
+</section>
+{% endblock %}
