@@ -262,6 +262,27 @@ def verify_exam_attendance(session_id, student_id):
         raise
     except (BiometricVerificationDisabled, BiometricProviderUnavailable, ValueError) as exc:
         connection.rollback()
+        # Keep a minimal operational record for provider errors after the
+        # candidate/session authorization checks. Never retain the capture.
+        if isinstance(exc, BiometricProviderUnavailable):
+            try:
+                connection.execute("""
+                    INSERT INTO biometric_verification_events
+                    (session_id,student_id,outcome,provider_name,reason,recorded_by)
+                    VALUES(?,?,'error',?,?,?)
+                """, (session_id,student_id,
+                      getattr(provider, "name", None),
+                      str(exc)[:500],session["user_id"]))
+                connection.execute("""
+                    INSERT INTO audit_events(actor_user_id,action,entity_type,entity_id,summary)
+                    VALUES (?,?,?,?,?)
+                """, (session["user_id"],"biometric_verification_error",
+                      "session_candidate",f"{session_id}:{student_id}",
+                      "Biometric provider error; no attendance was recorded."))
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                current_app.logger.exception("Could not persist biometric provider error audit")
         flash(str(exc) + " No attendance was recorded.", "error")
     except Exception:
         connection.rollback()
