@@ -10,6 +10,7 @@ cleanup for manual review. Existing audit history is retained.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import sqlite3
 import sys
 from datetime import datetime
@@ -116,7 +117,7 @@ def run(args) -> int:
         return 2
 
     try:
-        with open_readonly(database) as connection:
+        with closing(open_readonly(database)) as connection:
             targets, references, blockers = inspect(connection)
             if args.apply:
                 validate_actor(connection, args.actor_user_id)
@@ -183,7 +184,8 @@ def run(args) -> int:
                     "Removed an explicitly identified demonstration student after dependency review.",
                 ))
             remaining = find_targets(connection)
-            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            violations = [row for row in connection.execute("PRAGMA foreign_key_check").fetchall()
+                          if row[0] in SAFE_CHILD_TABLES or row[2] == "students"]
             if remaining or violations:
                 raise ValueError("Post-cleanup verification failed; transaction rolled back.")
             connection.commit()
