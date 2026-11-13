@@ -83,7 +83,7 @@ class SessionIdentityReviewTests(unittest.TestCase):
         self.assertIn(b"Provider-gated",response.data)
         self.assertIn(b"KSU/001",response.data)
         self.assertNotIn(b"KSU/002",response.data)
-        self.assertIn(b"does not capture, upload, compare, template or store",response.data)
+        self.assertIn(b"No simulated match is generated",response.data)
 
     def test_unassigned_invigilator_cannot_open_session_identity_station(self):
         self.set_user("invigilator",99)
