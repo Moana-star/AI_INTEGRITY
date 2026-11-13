@@ -18,20 +18,53 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
+# Compile and run the automated suite before initializing a local database.
 python -m compileall -q app.py modules tests
 python -m unittest discover -v
+```
+
+### Initialize the empty local database and first administrator
+
+The application does not create its foundational tables or a default administrator during a login request. Initialize the database explicitly before starting Flask. This prevents an uninitialized database from being mistaken for an authentication failure and avoids shipping a shared default password.
+
+In the same PowerShell session, choose an administrator username and enter a unique password of at least 16 characters. The password prompt below is masked and the temporary environment variables are cleared immediately after initialization:
+
+```powershell
+$adminUsername = Read-Host "Choose the initial administrator username"
+$securePassword = Read-Host "Enter a unique administrator password (minimum 16 characters)" -AsSecureString
+$passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+try {
+    $env:EIMS_BOOTSTRAP_ADMIN_USERNAME = $adminUsername.Trim().ToLower()
+    $env:EIMS_BOOTSTRAP_ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+    python database/database.py
+}
+finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
+    Remove-Item Env:EIMS_BOOTSTRAP_ADMIN_USERNAME -ErrorAction SilentlyContinue
+    Remove-Item Env:EIMS_BOOTSTRAP_ADMIN_PASSWORD -ErrorAction SilentlyContinue
+    Remove-Variable securePassword, passwordPointer, adminUsername -ErrorAction SilentlyContinue
+}
+```
+
+Confirm that the initializer reports that the database is ready and that the initial administrator was provisioned. Do not run `--demo` for this clean institutional-installation check. The default database is empty of student, examination and incident records.
+
+### Start and verify the application
+
+In the first PowerShell window:
+
+```powershell
 python app.py
 ```
 
-In a second PowerShell window, from the same directory:
+In a second PowerShell window, from the same repository directory:
 
 ```powershell
 Invoke-WebRequest http://127.0.0.1:5000/healthz -UseBasicParsing
 ```
 
-Expected readiness response: HTTP 200 with `{"status":"ok"}`. Stop the app with Ctrl+C.
+Expected readiness response: HTTP 200 with `{"status":"ok"}`. Then open `http://127.0.0.1:5000/login` and sign in with the administrator credentials entered during initialization. Stop the app with Ctrl+C.
 
-Record the Windows version, Python version, pip installation result, complete test summary, startup log and health response. Redact secrets and never use live student records. If a command fails, preserve the complete error text; do not mark installation passed.
+Record the Windows version, Python version, pip installation result, complete test summary, database initialization output, startup log, health response and successful administrator login. Redact secrets and never use live student records. If a command fails, preserve the complete error text; do not mark installation passed.
 
 ## B. Independent security assessment
 
