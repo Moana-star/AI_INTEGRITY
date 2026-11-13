@@ -203,7 +203,7 @@ def seed_data(cursor):
         WHERE course_code = 'DEMO' AND examination_name = 'Demonstration Examination'""").fetchone()
     if demo_exam is None:
         cursor.execute("""INSERT INTO examinations
-            (course_code, examination_name, examination_date, start_time, end_time, venue, status)
+            (course_code, examination_name, examination_date, start_time, end_time, venue, invigilator_id, status)
             VALUES ('DEMO', 'Demonstration Examination', ?, '09:00', '11:00', 'Demonstration Hall', 1, 'scheduled')""", (demo_date,))
         demo_exam_id = cursor.lastrowid
     else:
