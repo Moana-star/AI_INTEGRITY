@@ -11,6 +11,7 @@ To provision demo logins in a new database, set DEMO_ADMIN_PASSWORD and
 DEMO_INVIGILATOR_PASSWORD in the environment before running this script.
 """
 
+import argparse
 import sqlite3
 import os
 from datetime import date, datetime, timedelta
@@ -254,17 +255,66 @@ def seed_connected_device_incidents(cursor, student_id, examination_id):
                 (student_id, examination_id, incident_type, description, severity))
 
 
-def build_database():
+def provision_initial_administrator(cursor):
+    """Create the first administrator only from deployment-supplied credentials."""
+    username = (os.environ.get("EIMS_BOOTSTRAP_ADMIN_USERNAME") or "").strip().lower()
+    password = os.environ.get("EIMS_BOOTSTRAP_ADMIN_PASSWORD") or ""
+    if not username and not password:
+        return False
+    if not username or len(username) < 3 or len(password) < 16:
+        raise RuntimeError(
+            "Set EIMS_BOOTSTRAP_ADMIN_USERNAME and EIMS_BOOTSTRAP_ADMIN_PASSWORD "
+            "(at least 16 characters) together to provision the initial administrator."
+        )
+    existing = cursor.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    if existing:
+        raise RuntimeError(
+            "The bootstrap administrator username already exists. "
+            "Do not use bootstrap credentials to reset an existing account."
+        )
+    cursor.execute(
+        "INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')",
+        (username, generate_password_hash(password)),
+    )
+    return True
+
+
+def build_database(include_demo_data=False):
+    """Initialize an empty institutional database; demo records are opt-in only."""
     connection = sqlite3.connect(DB_PATH)
-    cursor = connection.cursor()
-
-    create_tables(cursor)
-    seed_data(cursor)
-
-    connection.commit()
-    connection.close()
+    try:
+        connection.execute("PRAGMA foreign_keys = ON")
+        cursor = connection.cursor()
+        create_tables(cursor)
+        if include_demo_data:
+            seed_data(cursor)
+        administrator_created = provision_initial_administrator(cursor)
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
     print(f"Database ready at: {DB_PATH}")
+    print(f"Mode: {'DEMO DATA' if include_demo_data else 'EMPTY INSTITUTIONAL DATABASE'}")
+    print(f"Initial administrator provisioned: {'yes' if administrator_created else 'no'}")
+    if not administrator_created:
+        print(
+            "No administrator account was created. Set EIMS_BOOTSTRAP_ADMIN_USERNAME "
+            "and EIMS_BOOTSTRAP_ADMIN_PASSWORD securely, then rerun initialization."
+        )
 
 
 if __name__ == "__main__":
-    build_database()
+    parser = argparse.ArgumentParser(
+        description="Initialize EIMS without fabricated student, examination or incident records."
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Explicitly insert synthetic demonstration records (never use for institutional operations).",
+    )
+    args = parser.parse_args()
+    build_database(include_demo_data=args.demo)
