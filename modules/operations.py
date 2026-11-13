@@ -60,6 +60,35 @@ def ensure_schema():
             FOREIGN KEY(created_by) REFERENCES users(id),
             CHECK(end_time > start_time)
         );
+        CREATE TABLE IF NOT EXISTS scheduling_write_lock (
+            id INTEGER PRIMARY KEY CHECK(id=1)
+        );
+        CREATE TABLE IF NOT EXISTS examination_session_schedule_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('rescheduled','cancelled')),
+            old_session_date TEXT NOT NULL,
+            old_start_time TEXT NOT NULL,
+            old_end_time TEXT NOT NULL,
+            old_venue_id INTEGER,
+            new_session_date TEXT NOT NULL,
+            new_start_time TEXT NOT NULL,
+            new_end_time TEXT NOT NULL,
+            new_venue_id INTEGER,
+            reason TEXT NOT NULL CHECK(length(trim(reason)) >= 12),
+            actor_user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(session_id) REFERENCES examination_sessions(id),
+            FOREIGN KEY(old_venue_id) REFERENCES venues(id),
+            FOREIGN KEY(new_venue_id) REFERENCES venues(id),
+            FOREIGN KEY(actor_user_id) REFERENCES users(id)
+        );
+        CREATE TRIGGER IF NOT EXISTS examination_session_schedule_history_no_update
+        BEFORE UPDATE ON examination_session_schedule_history
+        BEGIN SELECT RAISE(ABORT, 'Examination session schedule history is append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS examination_session_schedule_history_no_delete
+        BEFORE DELETE ON examination_session_schedule_history
+        BEGIN SELECT RAISE(ABORT, 'Examination session schedule history is append-only'); END;
         CREATE TABLE IF NOT EXISTS session_invigilators (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
@@ -177,6 +206,10 @@ def ensure_schema():
         CREATE INDEX IF NOT EXISTS idx_attendance_session ON session_attendance(session_id);
         CREATE INDEX IF NOT EXISTS idx_exam_sessions_date ON examination_sessions(session_date);
     """)
+    connection.execute(
+        "INSERT INTO scheduling_write_lock(id) VALUES(1) ON CONFLICT(id) DO NOTHING"
+    )
+    connection.commit()
     # Upgrade legacy attendance event constraint to allow provider-backed biometric events.
     # Preserve every existing event; no attendance history is discarded.
     event_sql = None
@@ -273,6 +306,65 @@ def _audit(connection, action, entity, entity_id, summary):
         INSERT INTO audit_events(actor_user_id, action, entity_type, entity_id, summary)
         VALUES (?, ?, ?, ?, ?)
     """, (session.get("user_id"), action, entity, str(entity_id), summary))
+
+
+def _begin_scheduling_write(connection):
+    """Serialize schedule mutations across SQLite and PostgreSQL connections.
+
+    SQLite obtains its reserved write lock before any conflict reads. PostgreSQL
+    locks the singleton row until commit/rollback. Every route that creates or
+    changes a reservation must use this same lock before reading schedule state.
+    """
+    if is_postgres():
+        connection.execute(
+            "SELECT id FROM scheduling_write_lock WHERE id=1 FOR UPDATE"
+        ).fetchone()
+    else:
+        connection.execute("BEGIN IMMEDIATE")
+
+
+def _schedule_conflicts(connection, session_id, session_date, start_time, end_time,
+                        venue_id=None, candidate_ids=(), invigilator_ids=()):
+    """Return reservation conflicts while the caller holds the scheduling lock."""
+    conflicts = []
+    excluded_id = session_id or 0
+    if venue_id is not None:
+        row = connection.execute("""
+            SELECT session_code FROM examination_sessions
+            WHERE venue_id=? AND session_date=?
+              AND status IN ('scheduled','active')
+              AND start_time < ? AND end_time > ? AND id<>?
+            LIMIT 1
+        """, (venue_id, session_date, end_time, start_time, excluded_id)).fetchone()
+        if row:
+            conflicts.append("The selected venue is already booked during this time.")
+    candidate_ids = tuple(dict.fromkeys(candidate_ids))
+    if candidate_ids:
+        marks = ",".join("?" for _ in candidate_ids)
+        row = connection.execute(f"""
+            SELECT es.session_code FROM session_candidates sc
+            JOIN examination_sessions es ON es.id=sc.session_id
+            WHERE sc.student_id IN ({marks}) AND es.id<>?
+              AND es.session_date=? AND es.status IN ('scheduled','active')
+              AND es.start_time < ? AND es.end_time > ?
+            LIMIT 1
+        """, (*candidate_ids, excluded_id, session_date, end_time, start_time)).fetchone()
+        if row:
+            conflicts.append("One or more candidates are already registered for an overlapping examination session.")
+    invigilator_ids = tuple(dict.fromkeys(invigilator_ids))
+    if invigilator_ids:
+        marks = ",".join("?" for _ in invigilator_ids)
+        row = connection.execute(f"""
+            SELECT es.session_code FROM session_invigilators si
+            JOIN examination_sessions es ON es.id=si.session_id
+            WHERE si.invigilator_id IN ({marks}) AND es.id<>?
+              AND es.session_date=? AND es.status IN ('scheduled','active')
+              AND es.start_time < ? AND es.end_time > ?
+            LIMIT 1
+        """, (*invigilator_ids, excluded_id, session_date, end_time, start_time)).fetchone()
+        if row:
+            conflicts.append("An assigned invigilator is already allocated to an overlapping examination session.")
+    return conflicts
 
 
 def _require_admin():
@@ -630,10 +722,10 @@ def create_session():
         session_date = datetime.strptime(form.get("session_date", ""), "%Y-%m-%d").date()
         start = datetime.strptime(form.get("start_time", ""), "%H:%M").time()
         end = datetime.strptime(form.get("end_time", ""), "%H:%M").time()
-        if end <= start or not code:
+        if end <= start or not code or session_date < date.today():
             raise ValueError
     except (ValueError, TypeError):
-        flash("Complete the session details and ensure the end time is after the start time.", "error")
+        flash("Enter a valid session code, a date that is today or later, and an end time after the start time.", "error")
         return redirect(url_for("operations.workspace"))
     year = (form.get("academic_year") or "").strip()
     semester = (form.get("semester") or "").strip()
@@ -641,85 +733,72 @@ def create_session():
         flash("Academic year, semester and linked academic unit are required to determine examination eligibility.", "error")
         return redirect(url_for("operations.workspace"))
     connection = db()
-    exam = connection.execute("SELECT id FROM examinations WHERE id=? AND definition_status='active'", (examination_id,)).fetchone()
-    unit = connection.execute("SELECT id FROM academic_units WHERE id=? AND active=1", (unit_id,)).fetchone() if unit_id else None
-    venue = connection.execute("SELECT capacity FROM venues WHERE id=? AND active=1", (venue_id,)).fetchone() if venue_id else None
-    if not exam or not unit or (venue_id and not venue):
-        connection.close()
-        flash("Select an existing examination, active academic unit and active venue.", "error")
-        return redirect(url_for("operations.workspace"))
     try:
+        _begin_scheduling_write(connection)
+        exam = connection.execute(
+            "SELECT id FROM examinations WHERE id=? AND definition_status='active'",
+            (examination_id,)
+        ).fetchone()
+        unit = connection.execute(
+            "SELECT id FROM academic_units WHERE id=? AND active=1", (unit_id,)
+        ).fetchone()
+        venue = connection.execute(
+            "SELECT capacity FROM venues WHERE id=? AND active=1", (venue_id,)
+        ).fetchone() if venue_id else None
+        if not exam or not unit or (venue_id and not venue):
+            connection.rollback()
+            flash("Select an existing examination, active academic unit and active venue.", "error")
+            return redirect(url_for("operations.workspace"))
+
+        candidates = connection.execute("""
+            SELECT e.student_id FROM student_unit_enrolments e
+            JOIN students s ON s.id=e.student_id
+            LEFT JOIN student_profiles p ON p.student_id=s.id
+            WHERE e.unit_id=? AND e.academic_year=? AND e.semester=?
+              AND e.enrolment_status='registered'
+              AND COALESCE(p.academic_status,'active')='active'
+            ORDER BY e.student_id
+        """, (unit_id, year, semester)).fetchall()
+        candidate_ids = [row["student_id"] for row in candidates]
+        if venue and len(candidate_ids) > venue["capacity"]:
+            connection.rollback()
+            flash("The enrolled candidate count exceeds the selected venue capacity. Choose a larger venue or correct enrolments.", "error")
+            return redirect(url_for("operations.workspace"))
+
+        conflicts = _schedule_conflicts(
+            connection, None, session_date.isoformat(), start.strftime("%H:%M"),
+            end.strftime("%H:%M"), venue_id, candidate_ids
+        )
+        if conflicts:
+            connection.rollback()
+            flash("Scheduling blocked: " + " ".join(conflicts), "error")
+            return redirect(url_for("operations.workspace"))
+
         cursor = connection.execute("""
             INSERT INTO examination_sessions
             (session_code, examination_id, unit_id, academic_year, semester, venue_id,
              session_date, start_time, end_time, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (code, examination_id, unit_id, year[:20], semester[:40], venue_id,
-              session_date.isoformat(), start.strftime("%H:%M"), end.strftime("%H:%M"), session.get("user_id")))
+              session_date.isoformat(), start.strftime("%H:%M"), end.strftime("%H:%M"),
+              session.get("user_id")))
         session_id = cursor.lastrowid
-        if venue_id:
-            venue_conflict = connection.execute("""
-                SELECT 1 FROM examination_sessions
-                WHERE venue_id=? AND session_date=? AND status!='cancelled'
-                  AND start_time < ? AND end_time > ? AND id!=?
-            """, (venue_id, session_date.isoformat(), end.strftime("%H:%M"),
-                  start.strftime("%H:%M"), session_id)).fetchone()
-            if venue_conflict:
-                connection.rollback()
-                connection.close()
-                flash("The selected venue is already booked during this time.", "error")
-                return redirect(url_for("operations.workspace"))
-        # Candidate list is derived from actual active student enrolments, not a demo list.
-        if unit_id:
-            candidates = connection.execute("""
-                SELECT e.student_id FROM student_unit_enrolments e
-                JOIN students s ON s.id=e.student_id
-                LEFT JOIN student_profiles p ON p.student_id=s.id
-                WHERE e.unit_id=? AND e.academic_year=? AND e.semester=?
-                  AND e.enrolment_status='registered'
-                  AND COALESCE(p.academic_status,'active')='active'
-            """, (unit_id, year, semester)).fetchall()
-            for seat_number, candidate in enumerate(candidates, start=1):
-                connection.execute("""
-                    INSERT INTO session_candidates
-                        (session_id,student_id,eligibility_status,eligibility_note,seat_label)
-                    VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.',?)
-                """, (session_id, candidate["student_id"], f"SEAT-{seat_number:03d}"))
-        candidate_count = len(candidates)
-        if candidates:
-            conflict = connection.execute("""
-                SELECT 1 FROM session_candidates existing
-                JOIN examination_sessions other ON other.id=existing.session_id
-                WHERE existing.student_id IN (
-                    SELECT student_id FROM session_candidates WHERE session_id=?
-                )
-                  AND other.id!=? AND other.session_date=?
-                  AND other.status NOT IN ('cancelled','completed')
-                  AND other.start_time < ? AND other.end_time > ?
-                LIMIT 1
-            """, (session_id, session_id, session_date.isoformat(),
-                  end.strftime("%H:%M"), start.strftime("%H:%M"))).fetchone()
-            if conflict:
-                connection.rollback()
-                connection.close()
-                flash("One or more candidates are already registered for an overlapping examination session.", "error")
-                return redirect(url_for("operations.workspace"))
-        if venue and candidate_count > venue["capacity"]:
-            connection.rollback()
-            connection.close()
-            flash("The enrolled candidate count exceeds the selected venue capacity. Choose a larger venue or correct enrolments.", "error")
-            return redirect(url_for("operations.workspace"))
+        for seat_number, candidate_id in enumerate(candidate_ids, start=1):
+            connection.execute("""
+                INSERT INTO session_candidates
+                    (session_id,student_id,eligibility_status,eligibility_note,seat_label)
+                VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.',?)
+            """, (session_id, candidate_id, f"SEAT-{seat_number:03d}"))
         _audit(connection, "create", "examination_session", session_id,
                f"Created examination session {code}; candidate list derived from registered enrolments.")
         connection.commit()
-        flash(f"Examination session created with {candidate_count} candidate(s) awaiting approved eligibility evaluation.", "success")
+        flash(f"Examination session created with {len(candidate_ids)} candidate(s) awaiting approved eligibility evaluation.", "success")
     except sqlite3.IntegrityError:
         connection.rollback()
         flash("Session code already exists or the session conflicts with a database constraint.", "error")
     finally:
         connection.close()
     return redirect(url_for("operations.workspace"))
-
 
 @operations_bp.post("/sessions/<int:session_id>/assign-invigilator")
 def assign_invigilator(session_id):
@@ -731,26 +810,31 @@ def assign_invigilator(session_id):
         flash("Choose a valid invigilator.", "error")
         return redirect(url_for("operations.workspace"))
     connection = db()
-    invigilator = connection.execute("SELECT id FROM invigilators WHERE id=? AND status='active'", (invigilator_id,)).fetchone()
-    target = connection.execute("SELECT session_date, start_time, end_time FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
-    if not invigilator or not target:
-        connection.close()
-        flash("Choose an active invigilator and a valid session.", "error")
-        return redirect(url_for("operations.workspace"))
-    overlap = connection.execute("""
-        SELECT 1 FROM session_invigilators si
-        JOIN examination_sessions es ON es.id=si.session_id
-        WHERE si.invigilator_id=? AND es.session_date=? AND es.status!='cancelled'
-          AND es.start_time < ? AND es.end_time > ?
-    """, (invigilator_id, target["session_date"], target["end_time"], target["start_time"])).fetchone()
-    if overlap:
-        connection.close()
-        flash("This invigilator is already assigned to an overlapping examination session.", "error")
-        return redirect(url_for("operations.workspace"))
     try:
-        cursor = connection.execute("""
-            INSERT INTO session_invigilators(session_id, invigilator_id) VALUES (?, ?)
-        """, (session_id, invigilator_id))
+        _begin_scheduling_write(connection)
+        invigilator = connection.execute(
+            "SELECT id FROM invigilators WHERE id=? AND status='active'", (invigilator_id,)
+        ).fetchone()
+        target = connection.execute(
+            "SELECT session_date, start_time, end_time, status FROM examination_sessions WHERE id=?",
+            (session_id,)
+        ).fetchone()
+        if not invigilator or not target or target["status"] != "scheduled":
+            connection.rollback()
+            flash("Choose an active invigilator and a scheduled session.", "error")
+            return redirect(url_for("operations.workspace"))
+        conflicts = _schedule_conflicts(
+            connection, session_id, target["session_date"], target["start_time"],
+            target["end_time"], invigilator_ids=[invigilator_id]
+        )
+        if conflicts:
+            connection.rollback()
+            flash("Assignment blocked: " + " ".join(conflicts), "error")
+            return redirect(url_for("operations.workspace"))
+        cursor = connection.execute(
+            "INSERT INTO session_invigilators(session_id, invigilator_id) VALUES (?, ?)",
+            (session_id, invigilator_id)
+        )
         _audit(connection, "assign", "session_invigilator", cursor.lastrowid,
                f"Assigned invigilator {invigilator_id} to session {session_id}.")
         connection.commit()
@@ -762,39 +846,183 @@ def assign_invigilator(session_id):
         connection.close()
     return redirect(url_for("operations.workspace"))
 
+@operations_bp.post("/sessions/<int:session_id>/reschedule")
+def reschedule_session(session_id):
+    if not _require_admin():
+        return redirect(url_for("login"))
+    reason = " ".join((request.form.get("reason") or "").split())
+    try:
+        session_date = datetime.strptime(request.form.get("session_date", ""), "%Y-%m-%d").date()
+        start = datetime.strptime(request.form.get("start_time", ""), "%H:%M").time()
+        end = datetime.strptime(request.form.get("end_time", ""), "%H:%M").time()
+        venue_raw = (request.form.get("venue_id") or "").strip()
+        venue_id = int(venue_raw) if venue_raw else None
+        if session_date < date.today() or end <= start or not 12 <= len(reason) <= 500:
+            raise ValueError
+    except (TypeError, ValueError):
+        flash("Enter a valid future/current date, an end time after the start time, and a reason of 12–500 characters.", "error")
+        return redirect(url_for("operations.workspace"))
+
+    connection = db()
+    try:
+        _begin_scheduling_write(connection)
+        target = connection.execute(
+            "SELECT * FROM examination_sessions WHERE id=?", (session_id,)
+        ).fetchone()
+        if not target:
+            connection.rollback()
+            flash("Examination session not found.", "error")
+            return redirect(url_for("operations.workspace"))
+        if target["status"] != "scheduled":
+            connection.rollback()
+            flash("Only scheduled sessions can be rescheduled. Active, completed and cancelled sessions require separate institutional review.", "error")
+            return redirect(url_for("operations.workspace"))
+        attendance = connection.execute("""
+            SELECT 1 FROM attendance_events WHERE session_id=?
+            UNION ALL
+            SELECT 1 FROM session_attendance WHERE session_id=?
+            LIMIT 1
+        """, (session_id, session_id)).fetchone()
+        seat_assignments = connection.execute(
+            "SELECT 1 FROM session_seat_assignments WHERE session_id=? LIMIT 1",
+            (session_id,)
+        ).fetchone()
+        if attendance or seat_assignments:
+            connection.rollback()
+            flash("This session already has attendance or seat allocations. Resolve those operational records through an approved process before rescheduling.", "error")
+            return redirect(url_for("operations.workspace"))
+
+        venue = connection.execute(
+            "SELECT capacity FROM venues WHERE id=? AND active=1", (venue_id,)
+        ).fetchone() if venue_id else None
+        if venue_id and not venue:
+            connection.rollback()
+            flash("The replacement venue must exist and be active.", "error")
+            return redirect(url_for("operations.workspace"))
+
+        candidate_rows = connection.execute(
+            "SELECT student_id FROM session_candidates WHERE session_id=? ORDER BY student_id",
+            (session_id,)
+        ).fetchall()
+        candidate_ids = [row["student_id"] for row in candidate_rows]
+        if venue and len(candidate_ids) > venue["capacity"]:
+            connection.rollback()
+            flash("The replacement venue does not have enough capacity for this session's candidates.", "error")
+            return redirect(url_for("operations.workspace"))
+
+        assigned_rows = connection.execute("""
+            SELECT si.invigilator_id, i.status
+            FROM session_invigilators si
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE si.session_id=?
+        """, (session_id,)).fetchall()
+        if any(row["status"] != "active" for row in assigned_rows):
+            connection.rollback()
+            flash("An assigned invigilator is inactive. Correct the staffing assignment before rescheduling.", "error")
+            return redirect(url_for("operations.workspace"))
+        invigilator_ids = [row["invigilator_id"] for row in assigned_rows]
+
+        new_date = session_date.isoformat()
+        new_start = start.strftime("%H:%M")
+        new_end = end.strftime("%H:%M")
+        conflicts = _schedule_conflicts(
+            connection, session_id, new_date, new_start, new_end,
+            venue_id, candidate_ids, invigilator_ids
+        )
+        if conflicts:
+            connection.rollback()
+            flash("Rescheduling blocked: " + " ".join(conflicts), "error")
+            return redirect(url_for("operations.workspace"))
+
+        updated = connection.execute("""
+            UPDATE examination_sessions
+            SET session_date=?, start_time=?, end_time=?, venue_id=?
+            WHERE id=? AND status='scheduled'
+        """, (new_date, new_start, new_end, venue_id, session_id))
+        if updated.rowcount != 1:
+            connection.rollback()
+            flash("The session changed while this request was being processed. Reload and try again.", "error")
+            return redirect(url_for("operations.workspace"))
+        connection.execute("""
+            INSERT INTO examination_session_schedule_history
+            (session_id,action,old_session_date,old_start_time,old_end_time,old_venue_id,
+             new_session_date,new_start_time,new_end_time,new_venue_id,reason,actor_user_id)
+            VALUES (?,'rescheduled',?,?,?,?,?,?,?,?,?,?)
+        """, (session_id, target["session_date"], target["start_time"], target["end_time"],
+              target["venue_id"], new_date, new_start, new_end, venue_id, reason,
+              session.get("user_id")))
+        _audit(connection, "reschedule", "examination_session", session_id,
+               f"Rescheduled {target['session_code']} from {target['session_date']} {target['start_time']}-{target['end_time']} to {new_date} {new_start}-{new_end}; reason: {reason}")
+        connection.commit()
+        flash("Examination session rescheduled. The previous schedule and reason remain in the audit history.", "success")
+    except sqlite3.IntegrityError:
+        connection.rollback()
+        flash("The reschedule could not be saved because of a database constraint.", "error")
+    finally:
+        connection.close()
+    return redirect(url_for("operations.workspace"))
 
 @operations_bp.post("/sessions/<int:session_id>/status")
 def update_session_status(session_id):
     if not _require_admin():
         return redirect(url_for("login"))
     new_status = (request.form.get("status") or "").strip()
+    reason = " ".join((request.form.get("reason") or "").split())
     if new_status not in {"active", "completed", "cancelled"}:
         flash("Choose a valid session status.", "error")
         return redirect(url_for("operations.workspace"))
+    if new_status == "cancelled" and not 12 <= len(reason) <= 500:
+        flash("Cancellation requires a reason of 12–500 characters.", "error")
+        return redirect(url_for("operations.workspace"))
     connection = db()
-    current = connection.execute("SELECT status FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
-    if not current:
-        connection.close()
-        flash("Examination session not found.", "error")
-        return redirect(url_for("operations.workspace"))
-    if current["status"] in {"completed", "cancelled"}:
-        connection.close()
-        flash("A completed or cancelled session cannot be reopened or changed.", "error")
-        return redirect(url_for("operations.workspace"))
-    if new_status == "active":
-        blockers = session_activation_blockers(connection, session_id)
-        if blockers:
-            connection.close()
-            flash("Session activation blocked: " + " ".join(blockers), "error")
+    try:
+        _begin_scheduling_write(connection)
+        current = connection.execute(
+            "SELECT * FROM examination_sessions WHERE id=?", (session_id,)
+        ).fetchone()
+        if not current:
+            connection.rollback()
+            flash("Examination session not found.", "error")
             return redirect(url_for("operations.workspace"))
-    connection.execute("UPDATE examination_sessions SET status=? WHERE id=?", (new_status, session_id))
-    _audit(connection, "status_change", "examination_session", session_id,
-           f"Session status changed from {current['status']} to {new_status}.")
-    connection.commit()
-    connection.close()
-    flash(f"Session status updated to {new_status}.", "success")
+        allowed = {
+            "scheduled": {"active", "cancelled"},
+            "active": {"completed"},
+        }
+        if new_status not in allowed.get(current["status"], set()):
+            connection.rollback()
+            flash("Invalid session status transition. Only scheduled sessions can be activated/cancelled, and only active sessions can be completed.", "error")
+            return redirect(url_for("operations.workspace"))
+        if new_status == "active":
+            blockers = session_activation_blockers(connection, session_id)
+            if blockers:
+                connection.rollback()
+                flash("Session activation blocked: " + " ".join(blockers), "error")
+                return redirect(url_for("operations.workspace"))
+        connection.execute(
+            "UPDATE examination_sessions SET status=? WHERE id=? AND status=?",
+            (new_status, session_id, current["status"])
+        )
+        if new_status == "cancelled":
+            connection.execute("""
+                INSERT INTO examination_session_schedule_history
+                (session_id,action,old_session_date,old_start_time,old_end_time,old_venue_id,
+                 new_session_date,new_start_time,new_end_time,new_venue_id,reason,actor_user_id)
+                VALUES (?,'cancelled',?,?,?,?,?,?,?,?,?,?)
+            """, (session_id, current["session_date"], current["start_time"], current["end_time"],
+                  current["venue_id"], current["session_date"], current["start_time"],
+                  current["end_time"], current["venue_id"], reason, session.get("user_id")))
+        summary = f"Session status changed from {current['status']} to {new_status}."
+        if new_status == "cancelled":
+            summary += f" Cancellation reason: {reason}"
+        _audit(connection, "status_change", "examination_session", session_id, summary)
+        connection.commit()
+        flash(f"Session status updated to {new_status}.", "success")
+    except sqlite3.IntegrityError:
+        connection.rollback()
+        flash("The status change could not be saved because of a database constraint.", "error")
+    finally:
+        connection.close()
     return redirect(url_for("operations.workspace"))
-
 
 @operations_bp.get("/sessions/<int:session_id>/attendance")
 def attendance(session_id):
@@ -1009,39 +1237,68 @@ def refresh_candidates(session_id):
     if not _require_admin():
         return redirect(url_for("login"))
     connection = db()
-    session_row = connection.execute("SELECT * FROM examination_sessions WHERE id=?", (session_id,)).fetchone()
-    if not session_row or not session_row["unit_id"]:
+    try:
+        _begin_scheduling_write(connection)
+        session_row = connection.execute(
+            "SELECT * FROM examination_sessions WHERE id=?", (session_id,)
+        ).fetchone()
+        if not session_row or not session_row["unit_id"]:
+            connection.rollback()
+            flash("This session has no linked academic unit.", "error")
+            return redirect(url_for("operations.workspace"))
+        if session_row["status"] != "scheduled":
+            connection.rollback()
+            flash("Candidate lists can only be refreshed while a session is scheduled.", "error")
+            return redirect(url_for("operations.workspace"))
+        candidates = connection.execute("""
+            SELECT e.student_id FROM student_unit_enrolments e
+            JOIN students s ON s.id=e.student_id
+            LEFT JOIN student_profiles p ON p.student_id=s.id
+            WHERE e.unit_id=? AND e.academic_year=? AND e.semester=?
+              AND e.enrolment_status='registered'
+              AND COALESCE(p.academic_status,'active')='active'
+            ORDER BY e.student_id
+        """, (session_row["unit_id"], session_row["academic_year"], session_row["semester"])).fetchall()
+        connection.execute("""
+            UPDATE session_candidates SET eligibility_status='pending',
+                eligibility_note='Candidate list refreshed; reevaluation under the current approved policy is required.'
+            WHERE session_id=?
+        """, (session_id,))
+        added = 0
+        for candidate in candidates:
+            cursor = connection.execute("""
+                INSERT INTO session_candidates
+                    (session_id,student_id,eligibility_status,eligibility_note)
+                VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.')
+                ON CONFLICT(session_id,student_id) DO NOTHING
+            """, (session_id, candidate["student_id"]))
+            added += cursor.rowcount
+        all_candidate_rows = connection.execute(
+            "SELECT student_id FROM session_candidates WHERE session_id=?", (session_id,)
+        ).fetchall()
+        candidate_ids = [row["student_id"] for row in all_candidate_rows]
+        conflicts = _schedule_conflicts(
+            connection, session_id, session_row["session_date"], session_row["start_time"],
+            session_row["end_time"], session_row["venue_id"], candidate_ids
+        )
+        venue = connection.execute(
+            "SELECT capacity FROM venues WHERE id=? AND active=1", (session_row["venue_id"],)
+        ).fetchone() if session_row["venue_id"] else None
+        if venue and len(candidate_ids) > venue["capacity"]:
+            conflicts.append("The refreshed candidate list exceeds the assigned venue capacity.")
+        if conflicts:
+            connection.rollback()
+            flash("Candidate refresh blocked: " + " ".join(conflicts), "error")
+            return redirect(url_for("operations.workspace"))
+        _audit(connection, "refresh_candidates", "examination_session", session_id,
+               f"Refreshed candidate list; {added} new candidates added and all candidates require fresh eligibility evaluation.")
+        connection.commit()
+        flash(f"Candidate list refreshed. {added} new candidate(s) added; all candidates now require fresh eligibility evaluation.", "success")
+    except sqlite3.IntegrityError:
+        connection.rollback()
+        flash("Candidate refresh could not be saved because of a database constraint.", "error")
+    finally:
         connection.close()
-        flash("This session has no linked academic unit.", "error")
-        return redirect(url_for("operations.workspace"))
-    candidates = connection.execute("""
-        SELECT e.student_id FROM student_unit_enrolments e
-        JOIN students s ON s.id=e.student_id
-        LEFT JOIN student_profiles p ON p.student_id=s.id
-        WHERE e.unit_id=? AND e.academic_year=? AND e.semester=?
-          AND e.enrolment_status='registered'
-          AND COALESCE(p.academic_status,'active')='active'
-    """, (session_row["unit_id"], session_row["academic_year"], session_row["semester"])).fetchall()
-    # Refresh invalidates prior eligibility decisions for this scheduled session.
-    # A fresh, effective policy evaluation is required before attendance resumes.
-    connection.execute("""
-        UPDATE session_candidates SET eligibility_status='pending',
-            eligibility_note='Candidate list refreshed; reevaluation under the current approved policy is required.'
-        WHERE session_id=?
-    """, (session_id,))
-    added = 0
-    for candidate in candidates:
-        cursor = connection.execute("""
-            INSERT OR IGNORE INTO session_candidates
-                (session_id,student_id,eligibility_status,eligibility_note)
-            VALUES (?,?,'pending','Awaiting evaluation under an effective, approved institutional eligibility policy.')
-        """, (session_id, candidate["student_id"]))
-        added += cursor.rowcount
-    _audit(connection, "refresh_candidates", "examination_session", session_id,
-           f"Refreshed candidate list; {added} new candidates added and all candidates require fresh eligibility evaluation.")
-    connection.commit()
-    connection.close()
-    flash(f"Candidate list refreshed. {added} new candidate(s) added; all candidates now require fresh eligibility evaluation.", "success")
     return redirect(url_for("operations.workspace"))
 
 @operations_bp.get("/sessions/<int:session_id>/attendance.csv")
