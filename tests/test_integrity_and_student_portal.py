@@ -47,6 +47,7 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
             item.start()
         operations.SCHEMA_READY = False
         integrity.SCHEMA_READY = False
+        student_portal.SCHEMA_READY = False
         institutional_registry.ensure_schema()
         operations.ensure_schema()
         integrity.ensure_schema()
