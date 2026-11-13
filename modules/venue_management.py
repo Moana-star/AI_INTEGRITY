@@ -183,9 +183,11 @@ def prepare():
         from modules.institutional_registry import ensure_schema as ensure_registry_schema
         from modules.operations import ensure_schema as ensure_operations_schema
         from modules.integrity import ensure_schema as ensure_integrity_schema
+        from modules.examination_definitions import ensure_schema as ensure_examination_definition_schema
         ensure_registry_schema()
         ensure_operations_schema()
         ensure_integrity_schema()
+        ensure_examination_definition_schema()
         ensure_schema()
         SCHEMA_READY = True
 
