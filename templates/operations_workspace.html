@@ -74,7 +74,34 @@
   {% if sessions %}
   <div class="table-wrap"><table><thead><tr><th>Session</th><th>Examination</th><th>Date & time</th><th>Venue</th><th>Candidates</th><th>Action</th></tr></thead><tbody>
   {% for s in sessions %}<tr><td><strong>{{ s.session_code }}</strong><br><small>{{ s.academic_year }} · {{ s.semester }}</small></td><td>{{ s.course_code }}<br><small>{{ s.examination_name }}</small></td><td>{{ s.session_date }}<br>{{ s.start_time }}–{{ s.end_time }}</td><td>{{ s.venue_code or 'Not assigned' }}<br><small>{{ s.room_name or '' }}</small></td><td>{{ s.candidate_count }}<br><small>{{ s.status|title }}</small></td><td><a class="button button-secondary" href="{{ url_for('operations.attendance', session_id=s.id) }}">Open attendance</a> <a class="button button-secondary" href="{{ url_for('identity.session_identity', session_id=s.id) }}">Identity review</a> <a class="button button-secondary" href="{{ url_for('operations.export_attendance_csv', session_id=s.id) }}">Export CSV</a>
-  {% if is_admin %}<form method="post" action="{{ url_for('operations.update_session_status', session_id=s.id) }}" class="inline-form"><select name="status" aria-label="Session status"><option value="active" {% if s.status == 'active' %}selected{% endif %}>Activate</option><option value="completed">Complete</option><option value="cancelled">Cancel</option></select><button class="button button-secondary" type="submit">Update status</button></form><form method="post" action="{{ url_for('operations.refresh_candidates', session_id=s.id) }}"><button class="button button-secondary" type="submit">Refresh candidates</button></form><form method="post" action="{{ url_for('operations.allocate_session_seats', session_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button-secondary" type="submit">Allocate seats</button></form><form method="post" action="{{ url_for('operations.assign_invigilator', session_id=s.id) }}" class="inline-form"><select name="invigilator_id" required aria-label="Invigilator">{% for i in invigilators %}<option value="{{ i.id }}">{{ i.employee_number }} — {{ i.first_name }} {{ i.last_name }}</option>{% endfor %}</select><button class="button button-secondary" type="submit">Assign</button></form>{% endif %}</td></tr>{% endfor %}
+  {% if is_admin %}
+  <a class="button button-secondary" href="{{ url_for('operations.session_schedule_history', session_id=s.id) }}">Schedule history</a>
+  {% if s.status == 'scheduled' %}
+  <details><summary>Reschedule session</summary>
+    <form method="post" action="{{ url_for('operations.reschedule_session', session_id=s.id) }}" class="stack-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>New date<input type="date" name="session_date" value="{{ s.session_date }}" min="{{ today }}" required></label>
+      <div class="form-row"><label>New start time<input type="time" name="start_time" value="{{ s.start_time }}" required></label><label>New end time<input type="time" name="end_time" value="{{ s.end_time }}" required></label></div>
+      <label>New venue<select name="venue_id"><option value="">Not assigned</option>{% for v in venues %}<option value="{{ v.id }}" {% if s.venue_id == v.id %}selected{% endif %}>{{ v.venue_code }} — {{ v.room_name }} ({{ v.capacity }} seats)</option>{% endfor %}</select></label>
+      <label>Reason for rescheduling<textarea name="reason" minlength="12" maxlength="500" required></textarea></label>
+      <button class="button button-primary" type="submit">Save rescheduled session</button>
+    </form>
+  </details>
+  {% endif %}
+  <form method="post" action="{{ url_for('operations.update_session_status', session_id=s.id) }}" class="inline-form">
+    <select name="status" aria-label="Session status">
+      {% if s.status == 'scheduled' %}<option value="active">Activate</option><option value="cancelled">Cancel</option>
+      {% elif s.status == 'active' %}<option value="completed">Complete</option>{% endif %}
+    </select>
+    <input name="reason" maxlength="500" placeholder="Cancellation reason (required to cancel)" aria-label="Cancellation reason">
+    <button class="button button-secondary" type="submit">Update status</button>
+  </form>
+  {% if s.status == 'scheduled' %}
+  <form method="post" action="{{ url_for('operations.refresh_candidates', session_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button-secondary" type="submit">Refresh candidates</button></form>
+  <form method="post" action="{{ url_for('operations.allocate_session_seats', session_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button-secondary" type="submit">Allocate seats</button></form>
+  <form method="post" action="{{ url_for('operations.assign_invigilator', session_id=s.id) }}" class="inline-form"><select name="invigilator_id" required aria-label="Invigilator">{% for i in invigilators %}<option value="{{ i.id }}">{{ i.employee_number }} — {{ i.first_name }} {{ i.last_name }}</option>{% endfor %}</select><button class="button button-secondary" type="submit">Assign</button></form>
+  {% endif %}
+{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>
   {% else %}<p class="empty-state">No examination sessions have been created or assigned yet.</p>{% endif %}
 </section>

@@ -157,11 +157,58 @@ The original `examinations` table has legacy NOT NULL schedule columns. To avoid
 
 The examination-definition increment above is implemented and CI-verified. The whole Phase 2 is **not yet production-accepted**. The remaining work from the audit is:
 
-1. Transaction/concurrency-safe reservations for competing venue, candidate and invigilator allocations.
-2. Audited rescheduling and cancellation reason/history workflows, including immutable completed-session handling.
+1. **Completed on the scheduling safety branch:** serialized venue, candidate and invigilator reservations, with SQLite and PostgreSQL concurrency tests.
+2. **Completed on the scheduling safety branch:** reasoned/audited rescheduling and cancellation history, immutable completed/cancelled sessions, and safeguards for sessions with attendance or seat allocations.
 3. Controlled venue closure, capacity changes, seat-layout versioning and reasoned seat overrides.
 4. Institution-approved scheduling buffers, invigilator qualifications/ratios and chief-invigilator rules.
-5. Browser-level acceptance of authenticated examination-officer workflows using institution-authorized data and manual review of the real local database.
+5. Browser-level acceptance of authenticated examination-officer scheduling workflows using institution-authorized data and manual review of the real local database.
 6. A reviewed migration to retire the legacy schedule columns without losing existing examination, session or incident references.
 
 No production deployment, institutional data import, merge to `main`, or biometric activation is authorized by this implementation.
+
+
+## 9. Scheduling concurrency and rescheduling increment
+
+**Implementation branch:** `feature/eims-phase-2-scheduling-safety`  
+**Status:** Implemented and CI-verified at commit `5014a35cdd5fdc4a6e846677ce2ace4b2083c9dc`.
+
+### Reservation serialization
+
+- Added a singleton `scheduling_write_lock` row used to serialize schedule mutations.
+- SQLite uses `BEGIN IMMEDIATE` before reservation reads, so competing writers cannot both pass the same availability check and then commit overlapping reservations.
+- PostgreSQL uses `SELECT ... FOR UPDATE` against the singleton lock row; the lock is held until transaction commit or rollback.
+- Session creation, invigilator assignment, candidate refresh, seat allocation, venue-layout changes, rescheduling and status/cancellation transitions use the shared lock.
+- The overlap checks are centralized for venue, candidate and assigned-invigilator reservations. Adjacent time windows remain valid; cancelled and completed sessions do not reserve a live slot.
+- New session creation and rescheduling reject dates earlier than the application server's current date. Institution timezone configuration and any room-change/setup buffers remain external policy decisions.
+
+### Rescheduling and cancellation
+
+- Added a reschedule action for scheduled sessions, with date, time, venue and a mandatory reason.
+- Rescheduling rechecks active venue status, venue capacity, candidate overlap and all assigned invigilator overlaps while holding the scheduling lock.
+- Rescheduling is blocked for active, completed or cancelled sessions, and for sessions that already have attendance events or allocated seats. Existing candidate, invigilator and session identities are retained.
+- Cancellation is a scheduled-to-cancelled transition and requires a reason. Active sessions cannot be cancelled through this ordinary workflow; they require an institution-approved operational procedure.
+- Status transitions are constrained: scheduled → active/cancelled; active → completed. Completed and cancelled sessions are terminal.
+- Every reschedule and cancellation writes both a central `audit_events` entry and an append-only `examination_session_schedule_history` row with old/new schedule values, venue references, actor and reason.
+- A read-only schedule-history page is available to administrators and examination officers.
+- Append-only database triggers reject updates and deletes to schedule-history records.
+
+### Concurrency verification
+
+- Added a SQLite two-connection serialization test.
+- Added a PostgreSQL two-connection row-lock serialization test in the PostgreSQL runtime integration suite.
+- Added route tests for successful rescheduling, venue/invigilator/candidate conflict rejection, invalid dates/reasons, completed-session immutability, attendance-safe rescheduling, cancellation reason enforcement, and append-only history.
+- CI is configured to run on this branch.
+
+### Verification at commit `5014a35`
+
+- Python unit suite: **146 tests passed, 0 failures, 0 errors; 1 environment-dependent skip**.
+- PostgreSQL runtime integration: **7 tests passed**, including a two-connection scheduler-lock test.
+- Chromium browser smoke: passed.
+- Non-root container build: passed.
+- Docker Compose validation: passed.
+
+Run: [GitHub Actions — scheduling safety verification](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43424915687).
+
+### Remaining cautions
+
+The serialization guarantee applies only when every future operation that changes a reservation resource acquires the same scheduler lock. New scheduling, room-allocation, candidate-allocation and staffing mutation routes must use `_begin_scheduling_write`. This increment does not introduce institution-specific timetable buffers, invigilator qualification/ratio rules, room closure workflows or layout versioning. It is not a production-readiness declaration.

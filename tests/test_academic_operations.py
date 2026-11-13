@@ -2,6 +2,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+import threading
 from unittest.mock import patch
 
 from modules import institutional_registry, operations, integrity
@@ -14,7 +15,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         os.close(handle)
         connection = sqlite3.connect(self.path)
         connection.executescript("""
-            CREATE TABLE users (id INTEGER PRIMARY KEY);
+            CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT);
             CREATE TABLE students (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 student_number TEXT UNIQUE NOT NULL,
@@ -330,6 +331,307 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             connection.execute("INSERT INTO session_attendance(session_id,student_id) VALUES(1,1)")
         connection.close()
+
+
+    def _seed_schedule_fixture(self, conflicting=False, candidate_conflicting=False):
+        connection = sqlite3.connect(self.path)
+        connection.execute("INSERT INTO users(id) VALUES(1),(2)")
+        connection.execute("""
+            INSERT INTO students(id,student_number,first_name,last_name)
+            VALUES(1,'TEST/001','Test','Candidate One'),
+                  (2,'TEST/002','Test','Candidate Two')
+        """)
+        connection.execute("""
+            INSERT INTO examinations(id,course_code,examination_name)
+            VALUES(1,'CSC201','Data Structures'),
+                  (2,'MAT201','Calculus')
+        """)
+        connection.execute("""
+            INSERT INTO venues(id,venue_code,room_name,capacity,active)
+            VALUES(1,'HALL-A','Hall A',100,1),
+                  (2,'HALL-B','Hall B',100,1)
+        """)
+        connection.execute("""
+            INSERT INTO invigilators(id,user_id,status)
+            VALUES(1,1,'active'),(2,2,'active')
+        """)
+        second_date = '2026-11-22' if (conflicting or candidate_conflicting) else '2026-11-21'
+        second_start = '10:00' if (conflicting or candidate_conflicting) else '09:00'
+        second_end = '12:00' if (conflicting or candidate_conflicting) else '11:00'
+        connection.execute("""
+            INSERT INTO examination_sessions
+            (id,session_code,examination_id,academic_year,semester,venue_id,
+             session_date,start_time,end_time,status)
+            VALUES
+            (1,'SESSION-A',1,'2026/2027','Semester 1',1,'2026-11-20','09:00','11:00','scheduled'),
+            (2,'SESSION-B',2,'2026/2027','Semester 1',2,?,?,?,'scheduled')
+        """, (second_date, second_start, second_end))
+        connection.execute("""
+            INSERT INTO session_candidates(session_id,student_id,eligibility_status)
+            VALUES(1,1,'pending'),(2,2,'pending')
+        """)
+        if candidate_conflicting:
+            connection.execute("INSERT INTO session_candidates(session_id,student_id,eligibility_status) VALUES(2,1,'pending')")
+        connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(1,1)")
+        if conflicting:
+            connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(2,1)")
+        else:
+            connection.execute("INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(2,2)")
+        connection.commit()
+        connection.close()
+        operations.SCHEMA_READY = False
+        integrity.SCHEMA_READY = False
+        previous_config = {
+            key: flask_app.config.get(key)
+            for key in ("TESTING", "SECRET_KEY", "WTF_CSRF_ENABLED")
+        }
+        self.addCleanup(lambda values=previous_config: flask_app.config.update(values))
+        flask_app.config.update(
+            TESTING=True,
+            SECRET_KEY="scheduling-test-secret",
+            WTF_CSRF_ENABLED=False,
+        )
+        client = flask_app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["user_id"] = 1
+            browser_session["role"] = "admin"
+        return client
+
+    def test_scheduling_write_lock_serializes_competing_sqlite_writers(self):
+        first = operations.db()
+        operations._begin_scheduling_write(first)
+        attempted = threading.Event()
+        acquired = threading.Event()
+        errors = []
+
+        def competing_writer():
+            second = operations.db()
+            try:
+                attempted.set()
+                operations._begin_scheduling_write(second)
+                acquired.set()
+                second.rollback()
+            except Exception as error:
+                errors.append(error)
+            finally:
+                second.close()
+
+        worker = threading.Thread(target=competing_writer)
+        worker.start()
+        self.assertTrue(attempted.wait(1))
+        self.assertFalse(acquired.wait(0.15), "second scheduler must wait for the active reservation transaction")
+        first.commit()
+        self.assertTrue(acquired.wait(2), "second scheduler should acquire the lock after the first commits")
+        worker.join(2)
+        first.close()
+        self.assertFalse(errors)
+
+    def test_reschedule_records_old_and_new_schedule_and_audit_reason(self):
+        client = self._seed_schedule_fixture()
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "12:00",
+            "end_time": "14:00",
+            "venue_id": "2",
+            "reason": "Venue maintenance required a timetable adjustment.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute("""
+            SELECT session_date,start_time,end_time,venue_id
+            FROM examination_sessions WHERE id=1
+        """).fetchone()
+        history = connection.execute("""
+            SELECT action,old_session_date,old_start_time,old_end_time,old_venue_id,
+                   new_session_date,new_start_time,new_end_time,new_venue_id,reason,actor_user_id
+            FROM examination_session_schedule_history WHERE session_id=1
+        """).fetchone()
+        audit = connection.execute("""
+            SELECT action,entity_type,entity_id,summary FROM audit_events
+            WHERE entity_type='examination_session' AND entity_id='1' AND action='reschedule'
+        """).fetchone()
+        connection.close()
+        self.assertEqual(current, ("2026-11-22","12:00","14:00",2))
+        self.assertEqual(history[:10], (
+            "rescheduled","2026-11-20","09:00","11:00",1,
+            "2026-11-22","12:00","14:00",2,
+            "Venue maintenance required a timetable adjustment."
+        ))
+        self.assertEqual(history[10], 1)
+        self.assertIsNotNone(audit)
+        self.assertIn("Venue maintenance required", audit[3])
+        page = client.get("/operations/sessions/1/history")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Venue maintenance required", page.data)
+
+    def test_reschedule_rejects_venue_and_invigilator_conflicts_without_mutation(self):
+        client = self._seed_schedule_fixture(conflicting=True)
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "11:00",
+            "end_time": "13:00",
+            "venue_id": "2",
+            "reason": "Move this session after a timetable review.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute(
+            "SELECT session_date,start_time,end_time,venue_id FROM examination_sessions WHERE id=1"
+        ).fetchone()
+        history_count = connection.execute(
+            "SELECT COUNT(*) FROM examination_session_schedule_history WHERE session_id=1"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(current, ("2026-11-20","09:00","11:00",1))
+        self.assertEqual(history_count, 0)
+
+    def test_reschedule_requires_reason_and_future_date(self):
+        client = self._seed_schedule_fixture()
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-12",
+            "start_time": "12:00",
+            "end_time": "14:00",
+            "venue_id": "2",
+            "reason": "Too short",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute(
+            "SELECT session_date,start_time,end_time,venue_id FROM examination_sessions WHERE id=1"
+        ).fetchone()
+        count = connection.execute(
+            "SELECT COUNT(*) FROM examination_session_schedule_history"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(current, ("2026-11-20","09:00","11:00",1))
+        self.assertEqual(count, 0)
+
+    def test_completed_session_cannot_be_rescheduled(self):
+        client = self._seed_schedule_fixture()
+        connection = sqlite3.connect(self.path)
+        connection.execute("UPDATE examination_sessions SET status='completed' WHERE id=1")
+        connection.commit()
+        connection.close()
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "12:00",
+            "end_time": "14:00",
+            "venue_id": "2",
+            "reason": "A completed session must remain immutable.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute(
+            "SELECT status,session_date,start_time,end_time FROM examination_sessions WHERE id=1"
+        ).fetchone()
+        connection.close()
+        self.assertEqual(current, ("completed","2026-11-20","09:00","11:00"))
+
+    def test_cancellation_requires_reason_and_preserves_schedule_history(self):
+        client = self._seed_schedule_fixture()
+        short = client.post("/operations/sessions/1/status", data={
+            "status": "cancelled", "reason": "No reason"
+        })
+        self.assertEqual(short.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        self.assertEqual(connection.execute(
+            "SELECT status FROM examination_sessions WHERE id=1"
+        ).fetchone()[0], "scheduled")
+        connection.close()
+
+        response = client.post("/operations/sessions/1/status", data={
+            "status": "cancelled",
+            "reason": "Institutional timetable change approved by the examination office.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        status = connection.execute(
+            "SELECT status FROM examination_sessions WHERE id=1"
+        ).fetchone()[0]
+        history = connection.execute("""
+            SELECT action,old_session_date,new_session_date,reason,actor_user_id
+            FROM examination_session_schedule_history WHERE session_id=1
+        """).fetchone()
+        connection.close()
+        self.assertEqual(status, "cancelled")
+        self.assertEqual(history[0], "cancelled")
+        self.assertEqual(history[1], history[2])
+        self.assertIn("Institutional timetable change", history[3])
+        self.assertEqual(history[4], 1)
+
+    def test_schedule_history_is_append_only(self):
+        client = self._seed_schedule_fixture()
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "12:00",
+            "end_time": "14:00",
+            "venue_id": "2",
+            "reason": "Venue maintenance required a timetable adjustment.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(
+                "UPDATE examination_session_schedule_history SET reason='rewritten' WHERE session_id=1"
+            )
+        connection.rollback()
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(
+                "DELETE FROM examination_session_schedule_history WHERE session_id=1"
+            )
+        connection.rollback()
+        connection.close()
+
+
+    def test_reschedule_rejects_candidate_overlap(self):
+        client = self._seed_schedule_fixture(candidate_conflicting=True)
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "10:00",
+            "end_time": "12:00",
+            "venue_id": "",
+            "reason": "Candidate timetable conflict requires another sitting.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute(
+            "SELECT session_date,start_time,end_time,venue_id FROM examination_sessions WHERE id=1"
+        ).fetchone()
+        history_count = connection.execute(
+            "SELECT COUNT(*) FROM examination_session_schedule_history WHERE session_id=1"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(current, ("2026-11-20","09:00","11:00",1))
+        self.assertEqual(history_count, 0)
+
+    def test_reschedule_is_blocked_after_attendance_is_recorded(self):
+        client = self._seed_schedule_fixture()
+        connection = sqlite3.connect(self.path)
+        connection.execute("""
+            INSERT INTO attendance_events
+                (session_id,student_id,event_type,verification_method,verification_status,recorded_by)
+            VALUES(1,1,'check_in','manual','verified',1)
+        """)
+        connection.commit()
+        connection.close()
+        response = client.post("/operations/sessions/1/reschedule", data={
+            "session_date": "2026-11-22",
+            "start_time": "12:00",
+            "end_time": "14:00",
+            "venue_id": "2",
+            "reason": "An attendance record must not be detached from its sitting.",
+        })
+        self.assertEqual(response.status_code, 302)
+        connection = sqlite3.connect(self.path)
+        current = connection.execute(
+            "SELECT session_date,start_time,end_time,venue_id FROM examination_sessions WHERE id=1"
+        ).fetchone()
+        history_count = connection.execute(
+            "SELECT COUNT(*) FROM examination_session_schedule_history WHERE session_id=1"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(current, ("2026-11-20","09:00","11:00",1))
+        self.assertEqual(history_count, 0)
 
 
 if __name__ == "__main__":

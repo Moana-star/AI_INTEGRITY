@@ -1,5 +1,6 @@
 import os
 import unittest
+import threading
 
 if not os.environ.get("DATABASE_URL", "").startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
     raise unittest.SkipTest("PostgreSQL runtime integration requires DATABASE_URL.")
@@ -136,6 +137,41 @@ class PostgreSQLRuntimeIntegrationTests(unittest.TestCase):
         self._as_role("admin")
         response = self.client.post("/biometric/students/1/enrol")
         self.assertEqual(response.status_code, 503)
+
+
+    def test_postgresql_scheduling_lock_serializes_competing_writers(self):
+        from modules import operations
+        from modules.database import get_connection
+        from modules.institutional_registry import ensure_schema as ensure_registry_schema
+        ensure_registry_schema()
+        operations.ensure_schema()
+        first = get_connection("database/exam_integrity.db")
+        operations._begin_scheduling_write(first)
+        attempted = threading.Event()
+        acquired = threading.Event()
+        errors = []
+
+        def competing_writer():
+            second = get_connection("database/exam_integrity.db")
+            try:
+                attempted.set()
+                operations._begin_scheduling_write(second)
+                acquired.set()
+                second.rollback()
+            except Exception as error:
+                errors.append(error)
+            finally:
+                second.close()
+
+        worker = threading.Thread(target=competing_writer)
+        worker.start()
+        self.assertTrue(attempted.wait(2))
+        self.assertFalse(acquired.wait(0.2), "PostgreSQL row lock must block the competing scheduler")
+        first.commit()
+        self.assertTrue(acquired.wait(5), "competing scheduler should proceed after the first commit")
+        worker.join(5)
+        first.close()
+        self.assertFalse(errors)
 
 
 if __name__ == "__main__":
