@@ -76,6 +76,30 @@ class PostgreSQLRuntimeIntegrationTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_registrar_can_create_an_academic_unit(self):
+        self._as_role("registrar")
+        response = self.client.post(
+            "/operations/units",
+            data={
+                "unit_code": "PG101",
+                "unit_name": "PostgreSQL Runtime Integration",
+                "department": "Computer Science",
+                "faculty": "Computing",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        from modules.database import get_connection
+        connection = get_connection("database/exam_integrity.db")
+        try:
+            unit = connection.execute(
+                "SELECT unit_code, unit_name FROM academic_units WHERE unit_code=?",
+                ("PG101",),
+            ).fetchone()
+            self.assertIsNotNone(unit)
+            self.assertEqual(unit["unit_name"], "PostgreSQL Runtime Integration")
+        finally:
+            connection.close()
+
     def test_biometric_routes_fail_closed_without_provider(self):
         self._as_role("admin")
         response = self.client.post("/biometric/students/1/enrol")
