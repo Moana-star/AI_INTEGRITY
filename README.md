@@ -25,6 +25,7 @@ A developing Flask-based university examination operations platform with student
 - [Kisii University integration readiness](docs/KISII_UNIVERSITY_INTEGRATION_READINESS.md)
 - [PostgreSQL migration and production runbook](docs/POSTGRESQL_MIGRATION_AND_PRODUCTION_RUNBOOK.md)
 - [Institutional integration and production acceptance](docs/INSTITUTIONAL_INTEGRATION_AND_PRODUCTION_ACCEPTANCE.md)
+- [Self-hosted PostgreSQL deployment](docs/SELF_HOSTED_DEPLOYMENT.md)
 - [Future improvements](#future-improvements)
 - [Author](#author)
 
