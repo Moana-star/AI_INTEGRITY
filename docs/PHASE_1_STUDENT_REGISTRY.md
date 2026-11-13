@@ -42,7 +42,23 @@ Admission number is the unique student identifier. EIMS does not infer an instit
 - Current academic eligibility is only as authoritative as the approved policy and source-referenced evidence supplied by the institution.
 - The CSV endpoint has a 2 MB upload limit. Large institutional imports require a separately designed background/batch workflow with resumability and reconciliation.
 
-## Demonstration-record cleanup (local SQLite only)\n\nRun from the repository root after pulling the development branch. First inspect the proposed changes; the default command is read-only:\n\n```powershell\npython scripts/remove_demo_students.py\n```\n\nIf the report shows only the three expected demonstration records and no blocking references, obtain the administrator's numeric user ID from the authorized local staff account and apply the cleanup:\n\n```powershell\npython scripts/remove_demo_students.py --apply --actor-user-id <ADMIN_USER_ID>\n```\n\nThe script creates a timestamped backup before writing. It refuses the entire operation if any demonstration student is referenced by operational or academic-history tables outside the narrowly allowed profile and unit-enrolment tables. In that case, do not force deletion: review the reported dependency and preserve institutional evidence. The script does not run against PostgreSQL; PostgreSQL requires a separately reviewed migration/maintenance procedure.\n\n## Acceptance tests required
+## Demonstration-record cleanup (local SQLite only)
+
+Run from the repository root after pulling the development branch. First inspect the proposed changes; the default command is read-only:
+
+```powershell
+python scripts/remove_demo_students.py
+```
+
+If the report shows only the three expected demonstration records and no blocking references, obtain the administrator's numeric user ID from the authorized local staff account and apply the cleanup:
+
+```powershell
+python scripts/remove_demo_students.py --apply --actor-user-id <ADMIN_USER_ID>
+```
+
+The script creates a timestamped backup before writing. It refuses the entire operation if any demonstration student is referenced by operational or academic-history tables outside the narrowly allowed profile and unit-enrolment tables. In that case, do not force deletion: review the reported dependency and preserve institutional evidence. The script does not run against PostgreSQL; PostgreSQL requires a separately reviewed migration/maintenance procedure.
+
+## Acceptance tests required
 
 1. Create and update a student without changing the student's internal database identity.
 2. Reject missing mandatory identity fields and invalid academic status/year values.
@@ -55,7 +71,9 @@ Admission number is the unique student identifier. EIMS does not infer an instit
 9. Prove that an invalid CSV causes zero student writes and zero misleading success audit entries.
 10. Verify the import and registry workflows on both SQLite and PostgreSQL.
 11. Confirm authorization and CSRF protection for all registry mutations.
-12. Complete institutional data-owner review before loading real student records.\n13. Run the demonstration cleanup in dry-run mode, review all dependencies, apply it against the intended local database, and verify only the three named records were removed.\n14. Verify student create/edit/search/import workflows manually in the running application and confirm current CI is green.
+12. Complete institutional data-owner review before loading real student records.
+13. Run the demonstration cleanup in dry-run mode, review all dependencies, apply it against the intended local database, and verify only the three named records were removed.
+14. Verify student create/edit/search/import workflows manually in the running application and confirm current CI is green.
 
 ## Operational safety
 
