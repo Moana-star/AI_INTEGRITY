@@ -84,6 +84,7 @@ These are targeted security improvements, not a substitute for the remaining con
 ### Operational assurance
 
 - [ ] Complete end-to-end tests for each role and workflow.
+- [ ] Expand the new Chromium smoke tests (public landing, staff sign-in, student sign-in and mobile viewport) into full role-based workflows.
 - [ ] Complete accessibility and usability testing with representative users.
 - [ ] Configure production WSGI hosting, TLS, monitoring and managed secrets.
 - [ ] Perform backup restoration and disaster-recovery drills.
@@ -97,8 +98,11 @@ These are targeted security improvements, not a substitute for the remaining con
 - The student/staff role model is not yet a complete institutional RBAC model.
 - CSRF validation and IP-based login rate limiting are enabled. Production must configure shared Redis-compatible rate-limit storage; account-level lockout and MFA remain outstanding.
 - Evidence files are private by path and access control, but encrypted storage, malware scanning and retention automation are not yet implemented.
-- The current test suite is a small automated foundation, not comprehensive coverage.
+- The automated suite includes PostgreSQL migration integration and a separate Chromium smoke-test job; neither is complete role-based E2E, accessibility, load or penetration coverage.
 - The biometric provider is not connected.
 - No university SIS integration or institutional deployment is configured.
 
 A successful unit-test workflow does not certify production security, legal compliance, or operational readiness.
+
+
+See [Institutional Integration and Production Acceptance](INSTITUTIONAL_INTEGRATION_AND_PRODUCTION_ACCEPTANCE.md) for the evidence-backed closure checklist and required Kisii University owners.
