@@ -141,3 +141,51 @@ These documents should be reconciled after confirming the current implementation
 **Live university student-data integration: not connected.**
 
 Do not merge PR #2 into `main`, enable biometric processing, or use live student data on the strength of this audit alone. Proceed to Phase 1 only after the outstanding Phase 0 verification and data-model decisions are recorded.
+
+
+## 11. Phase 0 follow-up verification (13 November 2026)
+
+### CI and automated test evidence
+
+The audited branch head was checked again at commit `4166aea8abcc585e2c2a2eb8c450057be0a34dba`. GitHub Actions run [43392647165](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43392647165) completed successfully. All four jobs passed:
+
+- `test`: dependency installation, module compilation and unit-test command.
+- `browser-smoke`: isolated synthetic database, Flask readiness and real Chromium smoke tests.
+- `postgres-runtime`: empty-first PostgreSQL bootstrap, non-destructive repeat bootstrap and Flask/module runtime schema checks.
+- `container-build`: non-root production container build and Docker Compose configuration validation.
+
+This is stronger CI evidence than a source-only review. It still does not prove every route, user journey, record-ownership boundary, concurrency case or production security control.
+
+### Clean installation
+
+**Status: BLOCKED / NOT VERIFIED on a developer workstation.** A fresh clone was attempted from the available execution environment, but outbound DNS/network access to GitHub was unavailable. No claim is made that a clean Windows installation or local startup passed. The documented local test checklist remains the required workstation acceptance procedure.
+
+### User-role authorization coverage
+
+The repository contains:
+- Unit tests for the five institutional role permission sets and malformed-role fail-closed behavior.
+- Blueprint-level anonymous and wrong-role denial tests.
+- Legacy administrator-route denial checks for registrar, examination officer, invigilator and student roles.
+- Staff authentication/provisioning tests and targeted invigilator assignment/attendance access tests.
+
+**Status: PARTIAL.** The existing suite is useful but is not yet a complete positive-and-negative matrix for every role × route × HTTP method × record ownership combination. Do not call the authorization audit complete.
+
+### Attendance data-model decision
+
+The current canonical model is:
+
+- `session_attendance`: one current-state row per `(session_id, student_id)`, protected by a unique constraint. It holds the candidate's current attendance status, check-in/check-out timestamps, verification method/status, verifier and notes.
+- `attendance_events`: append-only event history for check-in/check-out actions, including verification method/status, actor and timestamp.
+- `biometric_verification_events`: separate provider verification attempts/outcomes; it is not the attendance ledger.
+
+The current operations and biometric attendance paths read/write `session_attendance` and append corresponding `attendance_events`. No `examination_attendance` table reference was found in the current operations module during this review.
+
+**Decision: retain `session_attendance` as the current attendance projection and `attendance_events` as the event ledger.** Do not add a third attendance store or perform a destructive rewrite. Existing legacy databases must be checked for any historical attendance table/data before a migration; preserve and reconcile records before retiring any legacy table. The database migration process must not silently discard or reinterpret historical attendance.
+
+### Security verification
+
+**Status: PARTIAL / NOT A PENETRATION TEST.** Source and tests confirm CSRF integration, login rate limiting, secure-cookie configuration, security headers, password hashing, restricted staff provisioning, role checks, private evidence handling and fail-closed biometric configuration. The test suite does not replace an independent penetration test or prove MFA, session revocation/expiry, full object-level authorization, malware scanning, encrypted backup/key custody, restore drills, monitoring, or institutional privacy approval. Those remain release gates.
+
+### Phase 0 decision
+
+**Phase 0 is not fully closed.** Repository inspection, the attendance-model decision and current CI verification are recorded. Workstation installation, complete role/record authorization coverage and independent security verification remain open. No live university SIS, biometric provider or production credentials have been supplied. Keep PR #2 unmerged and keep `main` untouched until those gates are satisfied.
