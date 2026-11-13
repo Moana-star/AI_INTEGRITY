@@ -9,16 +9,14 @@ import sqlite3
 from flask import Blueprint, abort, render_template, request, session
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.operations import ensure_schema as ensure_operations_schema
+from modules.database import get_connection
 
 identity_bp = Blueprint("identity", __name__, url_prefix="/identity")
 DATABASE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "exam_integrity.db")
 
 
 def db():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    return get_connection(DATABASE)
 
 
 @identity_bp.before_request
