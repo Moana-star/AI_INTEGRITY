@@ -89,7 +89,7 @@ def ensure_schema():
             session_id INTEGER NOT NULL,
             student_id INTEGER NOT NULL,
             event_type TEXT NOT NULL CHECK(event_type IN ('check_in','check_out')),
-            verification_method TEXT NOT NULL CHECK(verification_method IN ('manual','student_card')),
+            verification_method TEXT NOT NULL CHECK(verification_method IN ('manual','student_card','biometric')),
             verification_status TEXT NOT NULL CHECK(verification_status IN ('verified','manual_review')),
             recorded_by INTEGER NOT NULL,
             notes TEXT,
@@ -179,6 +179,37 @@ def ensure_schema():
         CREATE INDEX IF NOT EXISTS idx_attendance_session ON session_attendance(session_id);
         CREATE INDEX IF NOT EXISTS idx_exam_sessions_date ON examination_sessions(session_date);
     """)
+    # Upgrade legacy attendance event constraint to allow provider-backed biometric events.
+    # Preserve every existing event; no attendance history is discarded.
+    event_sql = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_events'"
+    ).fetchone()
+    if event_sql and "'biometric'" not in (event_sql["sql"] or ""):
+        connection.commit()
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.executescript("""
+            ALTER TABLE attendance_events RENAME TO attendance_events_legacy;
+            CREATE TABLE attendance_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                student_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL CHECK(event_type IN ('check_in','check_out')),
+                verification_method TEXT NOT NULL CHECK(verification_method IN ('manual','student_card','biometric')),
+                verification_status TEXT NOT NULL CHECK(verification_status IN ('verified','manual_review')),
+                recorded_by INTEGER NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(session_id) REFERENCES examination_sessions(id),
+                FOREIGN KEY(student_id) REFERENCES students(id),
+                FOREIGN KEY(recorded_by) REFERENCES users(id)
+            );
+            INSERT INTO attendance_events
+            (id,session_id,student_id,event_type,verification_method,verification_status,recorded_by,notes,created_at)
+            SELECT id,session_id,student_id,event_type,verification_method,verification_status,recorded_by,notes,created_at
+            FROM attendance_events_legacy;
+            DROP TABLE attendance_events_legacy;
+            PRAGMA foreign_keys = ON;
+        """)
     # Legacy candidates were marked eligible merely because they were enrolled.
     # Require an explicit, current policy evaluation before attendance can be recorded.
     connection.execute("""
