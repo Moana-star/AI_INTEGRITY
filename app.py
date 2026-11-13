@@ -344,119 +344,35 @@ def admin_dashboard():
 
 
 # ============================================================
-# STUDENT MANAGEMENT (full CRUD)
+# LEGACY STUDENT URL COMPATIBILITY
+# The institutional registry is the single authoritative student
+# management workflow. These aliases prevent older forms from bypassing
+# profile validation, audit logging and registrar authorization.
 # ============================================================
 
 @app.route("/admin/students")
 def admin_students():
-    if not admin_required():
-        return redirect(url_for("login"))
-
-    connection = get_db_connection()
-    students = connection.execute("SELECT * FROM students ORDER BY id ASC").fetchall()
-    connection.close()
-
-    return render_template("students.html", students=students)
+    return redirect(url_for("registry.students"))
 
 
 @app.route("/admin/students/add", methods=["GET", "POST"])
 def add_student():
-    if not admin_required():
-        return redirect(url_for("login"))
-
-    if request.method == "GET":
-        return render_template("student_form.html", student=None)
-
-    student_number = (request.form.get("student_number") or "").strip()
-    first_name = (request.form.get("first_name") or "").strip()
-    last_name = (request.form.get("last_name") or "").strip()
-    course = (request.form.get("course") or "").strip()
-    year_of_study = request.form.get("year_of_study")
-
-    if not student_number or not first_name or not last_name:
-        return render_template(
-            "student_form.html", student=None,
-            error="Student number, first name and last name are required."
-        )
-
-    connection = get_db_connection()
-    try:
-        year_of_study = int(year_of_study) if year_of_study else None
-        if year_of_study is not None and not 1 <= year_of_study <= 6:
-            raise ValueError
-        connection.execute("""
-            INSERT INTO students (student_number, first_name, last_name, course, year_of_study)
-            VALUES (?, ?, ?, ?, ?)
-        """, (student_number.strip(), first_name.strip(), last_name.strip(), course.strip(), year_of_study))
-        connection.commit()
-    except (sqlite3.IntegrityError, ValueError):
-        connection.close()
-        return render_template("student_form.html", student=None, error="Check the student details. Student number must be unique and year must be between 1 and 6.")
-    connection.close()
-    flash("Student added successfully.", "success")
-
-    return redirect(url_for("admin_students"))
+    status_code = 303 if request.method == "POST" else 302
+    return redirect(url_for("registry.new_student"), code=status_code)
 
 
 @app.route("/admin/students/edit/<int:student_id>", methods=["GET", "POST"])
 def edit_student(student_id):
-    if not admin_required():
-        return redirect(url_for("login"))
-
-    connection = get_db_connection()
-
-    if request.method == "GET":
-        student = connection.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
-        connection.close()
-        if student is None:
-            return redirect(url_for("admin_students"))
-        return render_template("student_form.html", student=student)
-
-    student_number = (request.form.get("student_number") or "").strip()
-    first_name = (request.form.get("first_name") or "").strip()
-    last_name = (request.form.get("last_name") or "").strip()
-    course = (request.form.get("course") or "").strip()
-    year_of_study = request.form.get("year_of_study")
-
-    try:
-        year_of_study = int(year_of_study) if year_of_study else None
-        if not student_number or not first_name or not last_name or (year_of_study is not None and not 1 <= year_of_study <= 6):
-            raise ValueError
-        connection.execute("""
-        UPDATE students
-        SET student_number = ?, first_name = ?, last_name = ?, course = ?, year_of_study = ?
-        WHERE id = ?
-        """, (student_number.strip(), first_name.strip(), last_name.strip(), course.strip(), year_of_study, student_id))
-        connection.commit()
-    except (sqlite3.IntegrityError, ValueError):
-        connection.close()
-        lookup = get_db_connection()
-        student = lookup.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
-        lookup.close()
-        return render_template("student_form.html", student=student, error="Check the student details. Student number must be unique and year must be between 1 and 6.")
-    connection.close()
-    flash("Student changes saved.", "success")
-
-    return redirect(url_for("admin_students"))
+    status_code = 303 if request.method == "POST" else 302
+    return redirect(url_for("registry.edit_student", student_id=student_id), code=status_code)
 
 
 @app.route("/admin/students/delete/<int:student_id>", methods=["POST"])
 def delete_student(student_id):
-    if not admin_required():
-        return redirect(url_for("login"))
-
-    connection = get_db_connection()
-    try:
-        connection.execute("DELETE FROM students WHERE id = ?", (student_id,))
-        connection.commit()
-    except sqlite3.IntegrityError:
-        connection.close()
-        flash("This student has linked incident records and cannot be deleted.", "error")
-        return redirect(url_for("admin_students"))
-    connection.close()
-    flash("Student deleted.", "success")
-
-    return redirect(url_for("admin_students"))
+    # Student deletion is intentionally disabled in the legacy interface.
+    # Use governed academic status/history workflows; preserve linked evidence.
+    flash("Direct student deletion is disabled. Update the academic status through the Institutional Registry.", "warning")
+    return redirect(url_for("registry.students"), code=303)
 
 
 # ============================================================
