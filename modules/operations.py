@@ -1,6 +1,6 @@
 """Operational academic, examination-session and attendance workflows.
 
-Uses the existing SQLite database for the current development increment.
+Uses the shared database adapter: SQLite for local development and PostgreSQL when DATABASE_URL is configured.
 No synthetic biometric result is generated. Attendance identity checks are
 manual or student-card checks until an institution approves and configures a
 separate biometric provider.
