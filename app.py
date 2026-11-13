@@ -7,6 +7,7 @@ from datetime import datetime
 from werkzeug.security import check_password_hash, generate_password_hash
 from modules.institutional_registry import registry_bp
 from modules.operations import operations_bp
+from modules.venue_management import venue_management_bp
 from modules.examination_definitions import examination_definitions_bp
 from modules.integrity import integrity_bp
 from modules.student_portal import student_bp
@@ -37,6 +38,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
 app.register_blueprint(registry_bp)
 app.register_blueprint(examination_definitions_bp)
 app.register_blueprint(operations_bp)
+app.register_blueprint(venue_management_bp)
 app.register_blueprint(integrity_bp)
 app.register_blueprint(student_bp)
 app.register_blueprint(eligibility_bp)
