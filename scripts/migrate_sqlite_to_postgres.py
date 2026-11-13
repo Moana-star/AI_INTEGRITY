@@ -40,7 +40,7 @@ def create_consistent_snapshot(source_path: Path) -> Path:
     snapshot_path = Path(handle.name)
     handle.close()
     source = sqlite3.connect(
-        f"file:{source_path.resolve().as_posix()}?mode=ro", uri=True
+        f"{source_path.resolve().as_uri()}?mode=ro", uri=True
     )
     destination = sqlite3.connect(snapshot_path)
     try:
