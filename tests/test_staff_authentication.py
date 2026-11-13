@@ -53,6 +53,24 @@ class StaffAuthenticationTests(unittest.TestCase):
         self.assertIsNotNone(match)
         return match.group(1).decode()
 
+    def test_login_page_displays_all_four_human_readable_staff_roles(self):
+        response = self.client.get("/login")
+        self.assertEqual(response.status_code, 200)
+        for label in (b"Administrator", b"Registrar", b"Examination Officer", b"Invigilator"):
+            self.assertIn(label, response.data)
+        self.assertIn(b'value="admin">Administrator</option>', response.data)
+        self.assertNotIn(b"Demo username:", response.data)
+
+    def test_existing_admin_account_is_listed_as_administrator_not_internal_slug(self):
+        with self.client.session_transaction() as state:
+            state["user_id"] = 1
+            state["username"] = "admin"
+            state["role"] = "admin"
+        response = self.client.get("/admin/institutional-users")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"<td>Administrator</td>", response.data)
+        self.assertNotIn(b"<td>admin</td>", response.data)
+
     def test_registrar_account_can_sign_in_to_registry_workspace(self):
         connection = sqlite3.connect(self.path)
         connection.execute(

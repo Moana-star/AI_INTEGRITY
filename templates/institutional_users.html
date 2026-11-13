@@ -22,6 +22,6 @@
 </section>
 <section class="panel"><h2>Existing staff accounts</h2>
 <div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th></tr></thead><tbody>
-{% for user in users %}<tr><td>{{ user.full_name }}</td><td>{{ user.username }}</td><td>{{ user.institutional_role or 'Legacy role migration pending' }}</td></tr>{% else %}<tr><td colspan="3">No staff accounts found.</td></tr>{% endfor %}
+{% for user in users %}<tr><td>{{ user.full_name }}</td><td>{{ user.username }}</td><td>{{ {'admin': 'Administrator', 'registrar': 'Registrar', 'examination_officer': 'Examination Officer', 'invigilator': 'Invigilator'}.get(user.institutional_role, 'Unrecognized role') }}</td></tr>{% else %}<tr><td colspan="3">No staff accounts found.</td></tr>{% endfor %}
 </tbody></table></div></section>
 {% endblock %}
