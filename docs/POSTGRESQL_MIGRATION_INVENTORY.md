@@ -88,7 +88,7 @@ No PostgreSQL service, database credentials, institutional deployment environmen
 
 ## Migration utility added
 
-- `scripts/migrate_sqlite_to_postgres.py` performs a fail-closed, one-way copy from a fully initialized SQLite source to an empty PostgreSQL public schema.
+- `scripts/migrate_sqlite_to_postgres.py` creates a consistent SQLite backup snapshot using SQLite's online backup API, then performs a fail-closed, one-way copy from that snapshot to an empty PostgreSQL public schema.
 - It validates SQLite integrity and foreign keys, inventories every table and row count, refuses unknown SQLite triggers, views, virtual tables, partial indexes and expression indexes, recreates the known append-only history guards in PostgreSQL, copies records in dependency order, resets identity sequences, and verifies row counts. It normalizes standard postgres:// and postgresql:// URLs to the installed psycopg 3 driver.
 - Default invocation is a dry run. Applying requires both `--apply` and `--confirm-empty-target`; the destination URL is read only from `EIMS_POSTGRES_URL` so credentials are not placed in command-line arguments.
 - It intentionally does not activate PostgreSQL for Flask. The runtime modules still use SQLite directly, so production remains blocked.
