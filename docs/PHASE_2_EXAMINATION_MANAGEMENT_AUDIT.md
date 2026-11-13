@@ -212,3 +212,26 @@ Run: [GitHub Actions — scheduling safety verification](https://github.com/Moan
 ### Remaining cautions
 
 The serialization guarantee applies only when every future operation that changes a reservation resource acquires the same scheduler lock. New scheduling, room-allocation, candidate-allocation and staffing mutation routes must use `_begin_scheduling_write`. This increment does not introduce institution-specific timetable buffers, invigilator qualification/ratio rules, room closure workflows or layout versioning. It is not a production-readiness declaration.
+
+
+## 8. Venue lifecycle and layout-version increment (draft PR #5)
+
+Implemented on `feature/eims-phase-2-venue-lifecycle`, stacked on the scheduling-safety branch:
+
+- Venue capacity changes are serialized with the shared scheduling write lock and require a reason. Reductions are blocked if a scheduled/active session would exceed the proposed capacity or its existing allocated-seat count.
+- Venue closure is blocked while any scheduled/active session reserves the room. Staff must reschedule or cancel those sessions first. Reopening also requires a reason.
+- Seating layouts are stored as numbered, immutable versions with dimensions, a seat snapshot, creator, timestamp and reason.
+- New versions create version-scoped internal seat keys while retaining human-readable seat labels. Prior seat rows are retained and deactivated rather than deleted.
+- Existing session seat allocations retain their original seat IDs and layout-version references. New allocations use the current version.
+- New layout versions are checked against the venue's declared capacity and the accessible-seat requirements of scheduled/active sessions.
+- Venue lifecycle changes are written to append-only venue history and the central audit log; a read-only history page exposes the recorded changes and versions.
+- Additive SQLite/PostgreSQL schema support is included. No existing venue, seat, session, attendance or allocation rows are intentionally deleted.
+
+### Acceptance still required
+
+- Automated CI for the final PR head must pass; an earlier queued run is not evidence for later commits.
+- Authenticated browser acceptance must exercise venue registration, capacity changes, closure/reopening, version creation, seat allocation and historical-version preservation.
+- Institutional facilities staff must approve actual room capacities, accessible-seat assignments, evacuation/egress requirements, maintenance controls and the authorized reasons/roles.
+- Concurrency and load testing must cover simultaneous venue updates and session reservations on PostgreSQL.
+- The system does not yet provide a scheduled maintenance-window workflow or automated bulk reassignment of sessions when a room closes. Closure is deliberately blocked until reservations are resolved.
+- This increment does not complete Phase 2 or establish production readiness.
