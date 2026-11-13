@@ -15,7 +15,7 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
         os.close(handle)
         connection = sqlite3.connect(self.path)
         connection.executescript("""
-            CREATE TABLE users (id INTEGER PRIMARY KEY);
+            CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT);
             CREATE TABLE students (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 student_number TEXT UNIQUE NOT NULL,
@@ -393,13 +393,13 @@ class AcademicOperationsSchemaTests(unittest.TestCase):
 
     def test_scheduling_write_lock_serializes_competing_sqlite_writers(self):
         first = operations.db()
-        second = operations.db()
         operations._begin_scheduling_write(first)
         attempted = threading.Event()
         acquired = threading.Event()
         errors = []
 
         def competing_writer():
+            second = operations.db()
             try:
                 attempted.set()
                 operations._begin_scheduling_write(second)
