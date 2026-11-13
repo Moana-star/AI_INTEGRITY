@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Student Record | EIMS{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Institutional student record</p>
+    <h1>{{ student.first_name }} {{ student.last_name }}</h1>
+    <p class="page-subtitle">Admission number: <strong>{{ student.student_number }}</strong></p>
+  </div>
+  <div class="quick-actions">
+    <a class="btn btn-ghost" href="{{ url_for('registry.academic_history', student_id=student.id) }}">Academic history ({{ history_count }})</a>
+    <a class="btn btn-primary" href="{{ url_for('registry.edit_student', student_id=student.id) }}">Edit record</a>
+    <a class="btn btn-ghost" href="{{ url_for('registry.students') }}">Back to registry</a>
+  </div>
+</header>
+<section class="panel">
+  <h2>Identity and programme</h2>
+  <div class="form-grid">
+    <p><strong>Admission number</strong><br>{{ student.student_number }}</p>
+    <p><strong>Full name</strong><br>{{ student.first_name }} {{ student.last_name }}</p>
+    <p><strong>Programme</strong><br>{{ student.course or 'Not recorded' }}</p>
+    <p><strong>Year of study</strong><br>{{ student.year_of_study or 'Not recorded' }}</p>
+    <p><strong>Faculty / School</strong><br>{{ student.faculty or 'Not recorded' }}</p>
+    <p><strong>Department</strong><br>{{ student.department or 'Not recorded' }}</p>
+    <p><strong>Academic year</strong><br>{{ student.academic_year or 'Not recorded' }}</p>
+    <p><strong>Semester</strong><br>{{ student.semester or 'Not recorded' }}</p>
+    <p><strong>Academic status</strong><br>{{ student.academic_status|capitalize }}</p>
+    <p><strong>Institutional email</strong><br>{{ student.institutional_email or 'Not recorded' }}</p>
+    <p><strong>Phone</strong><br>{{ student.phone or 'Not recorded' }}</p>
+    <p><strong>Profile last updated</strong><br>{{ student.profile_updated_at or student.created_at or 'Not recorded' }}</p>
+  </div>
+</section>
+<section class="panel">
+  <h2>Unit enrolment history</h2>
+  <p class="field-hint">This list is drawn from registered unit-enrolment records. It does not by itself establish examination eligibility.</p>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th>Unit code</th><th>Unit name</th><th>Department</th><th>Academic year</th><th>Semester</th><th>Status</th><th>Recorded</th></tr></thead>
+    <tbody>
+    {% for item in enrolments %}
+      <tr><td><strong>{{ item.unit_code }}</strong></td><td>{{ item.unit_name }}</td><td>{{ item.department or '—' }}</td><td>{{ item.academic_year }}</td><td>{{ item.semester }}</td><td>{{ item.enrolment_status|capitalize }}</td><td>{{ item.created_at }}</td></tr>
+    {% else %}
+      <tr><td colspan="7" class="empty-row">No unit-enrolment records have been recorded for this student.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}
