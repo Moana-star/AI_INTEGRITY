@@ -451,7 +451,7 @@ def workspace():
             SELECT s.id, s.student_number, s.first_name, s.last_name, s.course
             FROM students s ORDER BY s.student_number
         """).fetchall()
-        venues = connection.execute("SELECT * FROM venues ORDER BY venue_code").fetchall()
+        venues = connection.execute("SELECT v.*, lv.version_number AS current_layout_version_number FROM venues v LEFT JOIN venue_layout_versions lv ON lv.id=v.current_layout_version_id ORDER BY v.venue_code").fetchall()
         invigilators = connection.execute("""
             SELECT id, employee_number, first_name, last_name
             FROM invigilators WHERE status='active' ORDER BY employee_number
@@ -556,6 +556,10 @@ def create_venue():
             VALUES (?, ?, ?, ?)
         """, (code[:30], building[:100] or None, room[:100], capacity))
         _audit(connection, "create", "venue", cursor.lastrowid, f"Created venue {code}.")
+        from modules.venue_management import _history
+        _history(connection, cursor.lastrowid, "registered",
+                 f"Venue {code} registered with an initial declared capacity.",
+                 old_capacity=None, new_capacity=capacity, old_active=None, new_active=1)
         connection.commit()
         flash("Examination venue created.", "success")
     except sqlite3.IntegrityError:
