@@ -352,23 +352,31 @@ def admin_dashboard():
 
 @app.route("/admin/students")
 def admin_students():
+    if not admin_required():
+        return redirect(url_for("login"))
     return redirect(url_for("registry.students"))
 
 
 @app.route("/admin/students/add", methods=["GET", "POST"])
 def add_student():
+    if not admin_required():
+        return redirect(url_for("login"))
     status_code = 303 if request.method == "POST" else 302
     return redirect(url_for("registry.new_student"), code=status_code)
 
 
 @app.route("/admin/students/edit/<int:student_id>", methods=["GET", "POST"])
 def edit_student(student_id):
+    if not admin_required():
+        return redirect(url_for("login"))
     status_code = 303 if request.method == "POST" else 302
     return redirect(url_for("registry.edit_student", student_id=student_id), code=status_code)
 
 
 @app.route("/admin/students/delete/<int:student_id>", methods=["POST"])
 def delete_student(student_id):
+    if not admin_required():
+        return redirect(url_for("login"))
     # Student deletion is intentionally disabled in the legacy interface.
     # Use governed academic status/history workflows; preserve linked evidence.
     flash("Direct student deletion is disabled. Update the academic status through the Institutional Registry.", "warning")
