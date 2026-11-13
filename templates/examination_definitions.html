@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Examination Definitions | EIMS{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <p class="eyebrow">EXAMINATION ADMINISTRATION</p>
+    <h1>Examination definitions</h1>
+    <p class="page-subtitle">Maintain examination identity and paper details separately from scheduled sittings.</p>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('examination_definitions.create_definition') }}">Create examination definition</a>
+</header>
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>{{ 'Active definitions' if selected_status == 'active' else 'Archived definitions' }}</h2>
+      <p class="muted">Actual dates, times, venues, candidates and invigilator assignments belong to examination sessions in Academic Operations.</p>
+    </div>
+    <div class="actions-cell">
+      <a class="btn btn-sm {{ 'btn-primary' if selected_status == 'active' else 'btn-ghost' }}" href="{{ url_for('examination_definitions.list_definitions', status='active') }}">Active</a>
+      <a class="btn btn-sm {{ 'btn-primary' if selected_status == 'archived' else 'btn-ghost' }}" href="{{ url_for('examination_definitions.list_definitions', status='archived') }}">Archived</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Code</th><th>Examination</th><th>Sessions</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+      {% for exam in definitions %}
+        <tr>
+          <td><strong>{{ exam.course_code }}</strong></td>
+          <td>{{ exam.examination_name }}</td>
+          <td>{{ exam.session_count }} total<br><small>{{ exam.open_session_count }} scheduled/active</small></td>
+          <td><span class="badge badge-{{ exam.definition_status }}">{{ exam.definition_status|title }}</span></td>
+          <td class="actions-cell">
+            {% if selected_status == 'active' %}
+              <a class="btn btn-sm btn-ghost" href="{{ url_for('examination_definitions.edit_definition', examination_id=exam.id) }}">Edit</a>
+              <form method="post" action="{{ url_for('examination_definitions.archive_definition', examination_id=exam.id) }}" class="stack-form" style="min-width:220px">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="sr-only" for="archive-reason-{{ exam.id }}">Archive reason</label>
+                <input id="archive-reason-{{ exam.id }}" name="reason" minlength="10" maxlength="500" required placeholder="Reason for archiving">
+                <button class="btn btn-sm btn-danger" type="submit">Archive</button>
+              </form>
+            {% else %}
+              <small>{{ exam.definition_archive_reason or 'No reason recorded' }}</small>
+              <form method="post" action="{{ url_for('examination_definitions.restore_definition', examination_id=exam.id) }}" class="stack-form" style="min-width:220px">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="sr-only" for="restore-reason-{{ exam.id }}">Restoration reason</label>
+                <input id="restore-reason-{{ exam.id }}" name="reason" minlength="10" maxlength="500" required placeholder="Reason for restoring">
+                <button class="btn btn-sm btn-secondary" type="submit">Restore</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="empty-row">No {{ selected_status }} examination definitions found.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

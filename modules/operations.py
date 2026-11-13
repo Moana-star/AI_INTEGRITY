@@ -296,6 +296,8 @@ def prepare():
         ensure_registry_schema()
         ensure_schema()
         ensure_integrity_schema()
+        from modules.examination_definitions import ensure_schema as ensure_examination_definition_schema
+        ensure_examination_definition_schema()
         SCHEMA_READY = True
 
 
@@ -361,7 +363,7 @@ def workspace():
             FROM invigilators WHERE status='active' ORDER BY employee_number
         """).fetchall()
         sessions = connection.execute(session_sql + " ORDER BY es.session_date DESC, es.start_time DESC").fetchall()
-        exams = connection.execute("SELECT id, course_code, examination_name FROM examinations ORDER BY examination_date DESC").fetchall()
+        exams = connection.execute("SELECT id, course_code, examination_name FROM examinations WHERE definition_status='active' ORDER BY course_code, examination_name").fetchall()
     connection.close()
     return render_template("operations_workspace.html", units=units, students=students,
                            venues=venues, invigilators=invigilators, sessions=sessions,
@@ -639,7 +641,7 @@ def create_session():
         flash("Academic year, semester and linked academic unit are required to determine examination eligibility.", "error")
         return redirect(url_for("operations.workspace"))
     connection = db()
-    exam = connection.execute("SELECT id FROM examinations WHERE id=?", (examination_id,)).fetchone()
+    exam = connection.execute("SELECT id FROM examinations WHERE id=? AND definition_status='active'", (examination_id,)).fetchone()
     unit = connection.execute("SELECT id FROM academic_units WHERE id=? AND active=1", (unit_id,)).fetchone() if unit_id else None
     venue = connection.execute("SELECT capacity FROM venues WHERE id=? AND active=1", (venue_id,)).fetchone() if venue_id else None
     if not exam or not unit or (venue_id and not venue):

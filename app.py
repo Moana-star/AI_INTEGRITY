@@ -7,6 +7,7 @@ from datetime import datetime
 from werkzeug.security import check_password_hash, generate_password_hash
 from modules.institutional_registry import registry_bp
 from modules.operations import operations_bp
+from modules.examination_definitions import examination_definitions_bp
 from modules.integrity import integrity_bp
 from modules.student_portal import student_bp
 from modules.eligibility import eligibility_bp
@@ -34,6 +35,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   MAX_CONTENT_LENGTH=6 * 1024 * 1024)
 
 app.register_blueprint(registry_bp)
+app.register_blueprint(examination_definitions_bp)
 app.register_blueprint(operations_bp)
 app.register_blueprint(integrity_bp)
 app.register_blueprint(student_bp)
@@ -290,10 +292,12 @@ def admin_dashboard():
     if not admin_required():
         return redirect(url_for("login"))
 
+    from modules.examination_definitions import ensure_schema as ensure_examination_definition_schema
+    ensure_examination_definition_schema()
     connection = get_db_connection()
 
     total_students = connection.execute("SELECT COUNT(*) AS total FROM students").fetchone()["total"]
-    total_examinations = connection.execute("SELECT COUNT(*) AS total FROM examinations").fetchone()["total"]
+    total_examinations = connection.execute("SELECT COUNT(*) AS total FROM examinations WHERE definition_status='active'").fetchone()["total"]
     total_invigilators = connection.execute("SELECT COUNT(*) AS total FROM invigilators").fetchone()["total"]
     open_incidents = connection.execute(
         "SELECT COUNT(*) AS total FROM incidents WHERE status = 'open'"
@@ -305,14 +309,29 @@ def admin_dashboard():
         "SELECT COUNT(*) AS total FROM incidents WHERE severity = 'high'"
     ).fetchone()["total"]
     examination_statuses = {row["status"]: row["total"] for row in connection.execute(
-        "SELECT status, COUNT(*) AS total FROM examinations GROUP BY status"
+        """SELECT CASE status WHEN 'active' THEN 'ongoing' ELSE status END AS status,
+                  COUNT(*) AS total
+           FROM examination_sessions
+           GROUP BY CASE status WHEN 'active' THEN 'ongoing' ELSE status END"""
     ).fetchall()}
     flagged_students, risk_summary = get_student_risk_records(connection)
 
     examinations = connection.execute(
-        """SELECT examinations.*, invigilators.first_name AS inv_first, invigilators.last_name AS inv_last
-           FROM examinations LEFT JOIN invigilators ON examinations.invigilator_id = invigilators.id
-           ORDER BY CASE examinations.status WHEN 'ongoing' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END, examinations.examination_date, examinations.start_time LIMIT 8"""
+        """SELECT es.id, e.course_code, e.examination_name,
+                  es.session_date AS examination_date, es.start_time, es.end_time,
+                  v.room_name AS venue,
+                  (SELECT i.first_name FROM session_invigilators si
+                   JOIN invigilators i ON i.id=si.invigilator_id
+                   WHERE si.session_id=es.id ORDER BY si.id LIMIT 1) AS inv_first,
+                  (SELECT i.last_name FROM session_invigilators si
+                   JOIN invigilators i ON i.id=si.invigilator_id
+                   WHERE si.session_id=es.id ORDER BY si.id LIMIT 1) AS inv_last,
+                  CASE es.status WHEN 'active' THEN 'ongoing' ELSE es.status END AS status
+           FROM examination_sessions es
+           JOIN examinations e ON e.id=es.examination_id
+           LEFT JOIN venues v ON v.id=es.venue_id
+           ORDER BY CASE es.status WHEN 'active' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+                    es.session_date, es.start_time LIMIT 8"""
     ).fetchall()
 
     incidents = connection.execute("""
@@ -751,6 +770,8 @@ def admin_reports():
     if not admin_required():
         return redirect(url_for("login"))
 
+    from modules.examination_definitions import ensure_schema as ensure_examination_definition_schema
+    ensure_examination_definition_schema()
     connection = get_db_connection()
 
     by_severity = connection.execute("""
@@ -770,7 +791,10 @@ def admin_reports():
     """).fetchall()
 
     examination_summary = {row["status"]: row["total"] for row in connection.execute(
-        "SELECT status, COUNT(*) AS total FROM examinations GROUP BY status"
+        """SELECT CASE status WHEN 'active' THEN 'ongoing' ELSE status END AS status,
+                  COUNT(*) AS total
+           FROM examination_sessions
+           GROUP BY CASE status WHEN 'active' THEN 'ongoing' ELSE status END"""
     ).fetchall()}
     invigilator_summary = {row["status"]: row["total"] for row in connection.execute(
         "SELECT status, COUNT(*) AS total FROM invigilators GROUP BY status"
@@ -850,28 +874,9 @@ def admin_settings():
 def invigilator_dashboard():
     if not invigilator_required():
         return redirect(url_for("login"))
-
-    connection = get_db_connection()
-
-    invigilator = connection.execute(
-        "SELECT * FROM invigilators WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
-
-    assigned_exams = []
-    if invigilator is not None:
-        assigned_exams = connection.execute("""
-        SELECT * FROM examinations
-            WHERE invigilator_id = ?
-            ORDER BY examination_date, start_time
-        """, (invigilator["id"],)).fetchall()
-
-    connection.close()
-
-    return render_template(
-        "invigilator_dashboard.html",
-        invigilator=invigilator,
-        assigned_exams=assigned_exams
-    )
+    # The session register is authoritative. Do not expose legacy master-row
+    # schedule fields as if they were actual invigilator assignments.
+    return redirect(url_for("operations.workspace"))
 
 
 if __name__ == "__main__":

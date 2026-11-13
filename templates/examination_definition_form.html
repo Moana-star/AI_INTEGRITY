@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if examination else 'Create' }} Examination Definition | EIMS{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><p class="eyebrow">EXAMINATION ADMINISTRATION</p>
+    <h1>{{ 'Edit examination definition' if examination else 'Create examination definition' }}</h1>
+    <p class="page-subtitle">This record identifies the examination. Schedule one or more sittings separately in Academic Operations.</p>
+  </div>
+</header>
+<section class="panel form-panel">
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" class="stack-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="course_code">Examination / unit code
+      <input id="course_code" name="course_code" maxlength="25" required value="{{ examination.course_code if examination else '' }}" placeholder="CSC201">
+    </label>
+    <label for="examination_name">Examination name
+      <input id="examination_name" name="examination_name" minlength="3" maxlength="160" required value="{{ examination.examination_name if examination else '' }}" placeholder="Data Structures and Algorithms">
+    </label>
+    <div class="alert alert-info" role="note">
+      Dates, start/end times, venues, candidate lists and invigilator allocations are not stored on this definition. They are configured on each examination session.
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">{{ 'Save changes' if examination else 'Create definition' }}</button>
+      <a class="btn btn-ghost" href="{{ url_for('examination_definitions.list_definitions') }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
