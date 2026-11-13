@@ -34,7 +34,7 @@ EXPECTED_TRIGGER_TABLES = IMMUTABLE_HISTORY_TABLES
 def validate_source(source_path: Path):
     if not source_path.is_file():
         raise RuntimeError(f"SQLite source database does not exist: {source_path}")
-    connection = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
+    connection = sqlite3.connect(f"file:{source_path.resolve().as_posix()}?mode=ro", uri=True)
     try:
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -148,7 +148,7 @@ def reset_identity_sequences(connection, metadata: MetaData):
 
 def migrate(source_path: Path, database_url: str, apply: bool, confirm_empty: bool):
     source_tables, source_triggers = validate_source(source_path)
-    source_engine = create_engine(f"sqlite:///{source_path.resolve()}")
+    source_engine = create_engine(f"sqlite:///{source_path.resolve().as_posix()}")
     target_engine = create_engine(database_url, pool_pre_ping=True)
 
     try:
