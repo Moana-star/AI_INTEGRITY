@@ -17,11 +17,6 @@ def main():
     database_url = os.environ.get("DATABASE_URL", "")
     if not database_url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
         raise SystemExit("DATABASE_URL must point to PostgreSQL.")
-    username = (os.environ.get("EIMS_BOOTSTRAP_ADMIN_USERNAME") or "").strip()
-    password = os.environ.get("EIMS_BOOTSTRAP_ADMIN_PASSWORD") or ""
-    if not username or len(password) < 16:
-        raise SystemExit("Set EIMS_BOOTSTRAP_ADMIN_USERNAME and a unique EIMS_BOOTSTRAP_ADMIN_PASSWORD of at least 16 characters.")
-
     with psycopg.connect(database_url.replace("postgresql+psycopg://", "postgresql://", 1)) as connection:
         tables = connection.execute(
             "SELECT table_name FROM information_schema.tables "
@@ -34,6 +29,11 @@ def main():
             raise SystemExit("PostgreSQL schema is partially initialized. Refusing to modify it.")
         print("Existing EIMS PostgreSQL schema detected; no bootstrap changes were made.")
         return
+
+    username = (os.environ.get("EIMS_BOOTSTRAP_ADMIN_USERNAME") or "").strip()
+    password = os.environ.get("EIMS_BOOTSTRAP_ADMIN_PASSWORD") or ""
+    if not username or len(password) < 16:
+        raise SystemExit("Set EIMS_BOOTSTRAP_ADMIN_USERNAME and a unique EIMS_BOOTSTRAP_ADMIN_PASSWORD of at least 16 characters.")
 
     source = Path(tempfile.gettempdir()) / "eims-empty-first-bootstrap.sqlite3"
     source.unlink(missing_ok=True)
