@@ -82,7 +82,7 @@ class BiometricAttendanceRouteTests(unittest.TestCase):
             (id,session_code,examination_id,academic_year,semester,venue_id,
              session_date,start_time,end_time,status)
             VALUES(1,'CSC101-TEST',1,'2026/2027','Semester 1',NULL,
-                   '2026-11-20','09:00','11:00','active')
+                   '2099-11-20','09:00','11:00','active')
         """)
         connection.execute("""
             INSERT INTO session_invigilators(session_id,invigilator_id) VALUES(1,1)
