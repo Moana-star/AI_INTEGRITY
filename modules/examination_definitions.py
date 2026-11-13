@@ -8,7 +8,6 @@ Legacy schedule columns are retained for compatibility with existing rows.
 """
 from __future__ import annotations
 
-import os
 import re
 import sqlite3
 
@@ -98,9 +97,8 @@ def _insert_definition(connection, code, name, actor_id):
         row["name"]
         for row in connection.execute("PRAGMA table_info(examinations)").fetchall()
     }
-    # These old columns are NOT NULL in the original schema. They are kept as
-    # inert compatibility values only; real sittings are scheduled in
-    # examination_sessions. They are never presented as a scheduled sitting.
+    # The original schema requires legacy schedule columns. Keep inert
+    # compatibility values; real sittings are recorded in examination_sessions.
     values = {
         "course_code": code,
         "examination_name": name,
