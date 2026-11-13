@@ -50,3 +50,8 @@ A provider-backed biometric enrolment and attendance workflow is now implemented
 ## University sign-off
 
 Before any production integration, obtain written approval from the relevant ICT system owners, Registrar (Academic Affairs), Finance, the Data Protection Officer and the authorized institutional governance body.
+
+
+## Completion intake pack
+
+See [Institutional Integration and Production Acceptance](INSTITUTIONAL_INTEGRATION_AND_PRODUCTION_ACCEPTANCE.md) for the exact technical, legal, provider, infrastructure and institutional evidence required to close the remaining work. No production credentials or biometric secrets should be sent through chat or committed to the repository.
