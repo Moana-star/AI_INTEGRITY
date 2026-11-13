@@ -93,3 +93,5 @@ No PostgreSQL service, database credentials, institutional deployment environmen
 - Default invocation is a dry run. Applying requires both `--apply` and `--confirm-empty-target`; the destination URL is read only from `EIMS_POSTGRES_URL` so credentials are not placed in command-line arguments.
 - It intentionally does not activate PostgreSQL for Flask. The runtime modules still use SQLite directly, so production remains blocked.
 - Preflight tests cover valid history triggers, unknown-trigger refusal, broken foreign-key refusal and table counting. These tests do not replace a real PostgreSQL migration rehearsal.
+
+- GitHub Actions now provisions an ephemeral PostgreSQL 16 service for the migration integration test. The test copies a synthetic SQLite database and verifies copied rows, foreign-key enforcement, append-only update/delete protection and identity-sequence continuation. This validates the migration utility against PostgreSQL, not the Flask runtime adapter.
