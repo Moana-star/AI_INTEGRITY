@@ -4,7 +4,7 @@
 **Working branch:** `feature/eims-institutional-completion`  
 **Latest reviewed change:** `da92c76a04c5076e19406c45a5e08998834e80ff`  
 **Review date:** 13 November 2026  
-**Disposition:** **Engineering baseline substantially complete; final automated verification pending. Not production-approved.**
+**Disposition:** **All four GitHub CI jobs passed for the final code-fix commit; local post-fix full-suite rerun remains pending. Not production-approved.**
 
 This register is the concise status authority for Phase 0. It distinguishes repository work that can be verified by code and tests from institutional and operational acceptance that requires the university, its data owners, infrastructure operators or an independent assessor.
 
@@ -52,7 +52,7 @@ The repository CI workflow runs four jobs:
 3. `postgres-runtime`: empty-first PostgreSQL bootstrap, repeat-bootstrap non-destructiveness and Flask/module runtime tests.
 4. `container-build`: non-root Docker build and Docker Compose configuration validation.
 
-The CI runs triggered by commit `da92c76a04c5076e19406c45a5e08998834e80ff` were in progress when this register was prepared. Do not record them as passed until all four jobs report success. Local skips do not replace the dedicated PostgreSQL CI jobs.
+GitHub Actions push run [43409416494](https://github.com/Moana-star/AI_INTEGRITY/actions/runs/43409416494) for commit `da92c76a04c5076e19406c45a5e08998834e80ff` completed with all four jobs successful: `test`, `browser-smoke`, `postgres-runtime` and `container-build`. The separate pull-request-triggered run was also initiated. Local skips do not replace the dedicated PostgreSQL CI jobs. The user must still rerun the complete suite locally against the corrected commit to close the workstation acceptance record.
 
 ## 4. Explicit non-completions and release gates
 
@@ -85,8 +85,8 @@ These items are not represented as completed merely because code scaffolding or 
 ## 6. Closure decision
 
 **Repository engineering baseline:** substantially implemented and documented.  
-**Final test closure:** pending rerun of the full local suite against `da92c76a04c5076e19406c45a5e08998834e80ff` and successful completion of all four CI jobs for that commit.  
+**Final test closure:** all four GitHub CI jobs passed for `da92c76a04c5076e19406c45a5e08998834e80ff`; local full-suite rerun against the corrected commit remains pending.  
 **Institutional pilot readiness:** not yet established; authoritative data, policy-owner approval, full authorization assessment and operational acceptance remain necessary.  
 **Production release:** not approved.
 
-Once the final test and CI evidence is green, Phase 0 may be closed as an **engineering foundation/audit phase with explicit external release gates**. That closure must not be interpreted as approval to process live student records, activate biometric checks or deploy the system for official examinations.
+Once the user confirms the post-fix local full suite is green, Phase 0 may be closed as an **engineering foundation/audit phase with explicit external release gates**. That closure must not be interpreted as approval to process live student records, activate biometric checks or deploy the system for official examinations.
