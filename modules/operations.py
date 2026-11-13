@@ -451,7 +451,7 @@ def workspace():
             SELECT s.id, s.student_number, s.first_name, s.last_name, s.course
             FROM students s ORDER BY s.student_number
         """).fetchall()
-        venues = connection.execute("SELECT * FROM venues WHERE active=1 ORDER BY venue_code").fetchall()
+        venues = connection.execute("SELECT * FROM venues ORDER BY venue_code").fetchall()
         invigilators = connection.execute("""
             SELECT id, employee_number, first_name, last_name
             FROM invigilators WHERE status='active' ORDER BY employee_number
