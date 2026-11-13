@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 import re
 
-from modules import institutional_registry, operations, integrity, student_portal
+from modules import institutional_registry, operations, integrity, student_portal, appeals
 
 
 class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
@@ -42,6 +42,7 @@ class IntegrityAndStudentPortalSchemaTests(unittest.TestCase):
             patch.object(operations, "DATABASE", self.path),
             patch.object(integrity, "DATABASE", self.path),
             patch.object(student_portal, "DATABASE", self.path),
+            patch.object(appeals, "DATABASE", self.path),
         ]
         for item in self.patches:
             item.start()
