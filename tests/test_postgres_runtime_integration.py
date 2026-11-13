@@ -142,6 +142,8 @@ class PostgreSQLRuntimeIntegrationTests(unittest.TestCase):
     def test_postgresql_scheduling_lock_serializes_competing_writers(self):
         from modules import operations
         from modules.database import get_connection
+        from modules.institutional_registry import ensure_schema as ensure_registry_schema
+        ensure_registry_schema()
         operations.ensure_schema()
         first = get_connection("database/exam_integrity.db")
         operations._begin_scheduling_write(first)
