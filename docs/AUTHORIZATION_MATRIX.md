@@ -39,12 +39,14 @@ Branch: feature/eims-institutional-completion
 - Student portal queries are constrained by the authenticated student ID; student incident response and appeals require ownership checks.
 - Senate review submission is constrained to the signed-in student's own verdict and the 21-day period.
 - Biometric enrolment is administrator/registrar only; live biometric attendance is administrator/examination officer or the session's assigned invigilator.
-- Invigilator workspace context is now restricted to assigned sessions, those sessions' candidates, linked units/venues and examinations. It no longer receives the institution-wide student and examination lists.
+- Invigilator workspace context is restricted to assigned sessions, those sessions' candidates, linked units/venues and examinations. It no longer receives institution-wide student and examination lists.
+- The legacy /admin/incidents/add form is now unavailable to invigilators because it exposes an unscoped student selector; invigilators are redirected to the session-bound incident workflow.
 
 ## Automated coverage
 
 - tests/test_access_control.py: role and permission semantics.
 - tests/test_academic_operations.py: registrar attendance denial, invigilator export denial, and assigned-session/candidate context isolation.
+- tests/test_legacy_route_authorization.py: invigilators cannot submit incidents through the legacy unscoped student picker.
 - tests/test_integrity_and_student_portal.py: incident and student self-service controls.
 - tests/test_independent_appeals.py: student ownership and independent appeal review.
 - tests/test_senate_review.py: own-verdict submission and review-period boundary.
