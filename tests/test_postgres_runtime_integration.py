@@ -88,6 +88,23 @@ class PostgreSQLRuntimeIntegrationTests(unittest.TestCase):
             ).fetchone()
             self.assertIsNotNone(record)
             self.assertEqual(record["first_name"], "Runtime")
+            student = connection.execute(
+                "SELECT id FROM students WHERE student_number=?",
+                ("PG-RUNTIME-001",),
+            ).fetchone()
+            connection.execute("""
+                INSERT INTO academic_history_events
+                    (student_id,event_type,effective_date,reason,recorded_by)
+                VALUES (?,'progression','2026-11-13','PostgreSQL append-only trigger integration test',1)
+            """, (student["id"],))
+            connection.commit()
+            import psycopg
+            with self.assertRaises(psycopg.Error):
+                connection.execute(
+                    "UPDATE academic_history_events SET reason='tampered' WHERE student_id=?",
+                    (student["id"],),
+                )
+            connection.rollback()
         finally:
             connection.close()
 
