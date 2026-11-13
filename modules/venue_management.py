@@ -58,7 +58,7 @@ def ensure_schema():
             CREATE TABLE IF NOT EXISTS venue_operations_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 venue_id INTEGER NOT NULL,
-                action TEXT NOT NULL CHECK(action IN ('capacity_changed','closed','reopened','layout_version_created')),
+                action TEXT NOT NULL CHECK(action IN ('registered','capacity_changed','closed','reopened','layout_version_created')),
                 old_capacity INTEGER,
                 new_capacity INTEGER,
                 old_active INTEGER,
@@ -182,8 +182,10 @@ def prepare():
     if not SCHEMA_READY:
         from modules.institutional_registry import ensure_schema as ensure_registry_schema
         from modules.operations import ensure_schema as ensure_operations_schema
+        from modules.integrity import ensure_schema as ensure_integrity_schema
         ensure_registry_schema()
         ensure_operations_schema()
+        ensure_integrity_schema()
         ensure_schema()
         SCHEMA_READY = True
 
@@ -345,6 +347,24 @@ def create_layout_version(venue_id):
             connection.rollback()
             flash("The new layout must contain at least the venue's declared capacity.", "error")
             return redirect(url_for("operations.workspace"))
+        accessible_count = sum(1 for seat in seats if seat[3])
+        pending_sessions = connection.execute("""
+            SELECT es.id, es.academic_year, es.semester
+            FROM examination_sessions es
+            WHERE es.venue_id=? AND es.status IN ('scheduled','active')
+        """, (venue_id,)).fetchall()
+        for pending in pending_sessions:
+            required_accessible = connection.execute("""
+                SELECT COUNT(*) FROM session_candidates sc
+                JOIN student_exam_accommodations a
+                  ON a.student_id=sc.student_id
+                 AND a.academic_year=? AND a.semester=?
+                WHERE sc.session_id=? AND a.requires_accessible_seat=1
+            """, (pending["academic_year"], pending["semester"], pending["id"])).fetchone()[0]
+            if required_accessible > accessible_count:
+                connection.rollback()
+                flash("Layout version blocked: it would not provide enough accessible seats for an existing scheduled/active session.", "error")
+                return redirect(url_for("operations.workspace"))
         version_number = connection.execute("""
             SELECT COALESCE(MAX(version_number),0)+1 FROM venue_layout_versions WHERE venue_id=?
         """, (venue_id,)).fetchone()[0]
@@ -383,3 +403,26 @@ def create_layout_version(venue_id):
     finally:
         connection.close()
     return redirect(url_for("operations.workspace"))
+
+
+@venue_management_bp.get("/<int:venue_id>/history")
+def venue_history(venue_id):
+    connection = db()
+    venue = connection.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
+    if not venue:
+        connection.close()
+        abort(404)
+    history = connection.execute("""
+        SELECT h.*, v.version_number
+        FROM venue_operations_history h
+        LEFT JOIN venue_layout_versions v ON v.id=h.layout_version_id
+        WHERE h.venue_id=?
+        ORDER BY h.id DESC
+    """, (venue_id,)).fetchall()
+    versions = connection.execute("""
+        SELECT version_number,row_count,seats_per_row,reason,created_by,created_at
+        FROM venue_layout_versions WHERE venue_id=? ORDER BY version_number DESC
+    """, (venue_id,)).fetchall()
+    connection.close()
+    from flask import render_template
+    return render_template("venue_history.html", venue=venue, history=history, versions=versions)
