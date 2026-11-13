@@ -196,3 +196,10 @@ The operational attendance model used by the current examination operations and 
 The latest CI run for the documentation follow-up commit completed successfully: all four jobs passed (`test`, `browser-smoke`, `postgres-runtime`, `container-build`). The role permission unit tests were expanded with an explicit critical allow/deny matrix for all five institutional roles. See [Phase 0 Role and Security Verification Matrix](PHASE_0_ROLE_SECURITY_MATRIX.md) for the precise coverage and remaining object-scope gaps.
 
 The attendance-model review also found that the legacy `examination_attendance` table is still created by the registry schema and is asserted by a registry test. It is not the current operations/biometric write path, but its schema presence must be dealt with by a data-preserving migration before that table is removed or no longer created. Therefore the operational model choice is recorded, while legacy-table retirement is still pending.
+
+
+## 13. Safe deprecation of the legacy attendance table
+
+The registry schema bootstrap no longer creates `examination_attendance` for new databases. A pre-existing table is deliberately not dropped, renamed, truncated or rewritten. Tests verify that clean bootstrap omits the table and that a pre-existing row survives a subsequent bootstrap unchanged.
+
+The operational model remains `session_attendance` plus append-only `attendance_events`. Physical retirement from an existing institutional database is still pending a database inventory, session mapping, restricted archive, row-count/checksum reconciliation, restore test and Registrar/data-owner approval. See [Legacy attendance table retirement procedure](ATTENDANCE_LEGACY_TABLE_RETIREMENT.md). Because legacy rows refer to an examination rather than a specific session, automatic migration could assign attendance to the wrong sitting; preserving them is safer until mapping is authorized.
