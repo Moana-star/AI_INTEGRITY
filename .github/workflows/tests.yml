@@ -9,6 +9,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: eims_test_password
+          POSTGRES_DB: eims_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d eims_migration_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      EIMS_POSTGRES_TEST_URL: postgresql+psycopg://postgres:eims_test_password@localhost:5432/eims_migration_test
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
