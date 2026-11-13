@@ -302,16 +302,6 @@ def prepare():
 @operations_bp.get("/")
 def workspace():
     connection = db()
-    units = connection.execute("SELECT * FROM academic_units ORDER BY unit_code").fetchall()
-    students = connection.execute("""
-        SELECT s.id, s.student_number, s.first_name, s.last_name, s.course
-        FROM students s ORDER BY s.student_number
-    """).fetchall()
-    venues = connection.execute("SELECT * FROM venues WHERE active=1 ORDER BY venue_code").fetchall()
-    invigilators = connection.execute("""
-        SELECT id, employee_number, first_name, last_name
-        FROM invigilators WHERE status='active' ORDER BY employee_number
-    """).fetchall()
     session_sql = """
         SELECT es.*, e.course_code, e.examination_name, v.venue_code, v.room_name,
                (SELECT COUNT(*) FROM session_candidates c WHERE c.session_id=es.id) AS candidate_count
@@ -319,16 +309,65 @@ def workspace():
         JOIN examinations e ON e.id=es.examination_id
         LEFT JOIN venues v ON v.id=es.venue_id
     """
-    if _require_admin():
-        sessions = connection.execute(session_sql + " ORDER BY es.session_date DESC, es.start_time DESC").fetchall()
-    else:
+    if session.get("role") == "invigilator":
+        # An invigilator sees only the sessions assigned to their own staff record,
+        # and only the candidates/units/venues connected to those sessions.
+        assigned_filter = """
+            FROM examination_sessions es
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=?
+        """
+        uid = (session["user_id"],)
         sessions = connection.execute(session_sql + """
             JOIN session_invigilators si ON si.session_id=es.id
             JOIN invigilators i ON i.id=si.invigilator_id
             WHERE i.user_id=?
             ORDER BY es.session_date DESC, es.start_time DESC
-        """, (session.get("user_id"),)).fetchall()
-    exams = connection.execute("SELECT id, course_code, examination_name FROM examinations ORDER BY examination_date DESC").fetchall()
+        """, uid).fetchall()
+        students = connection.execute("""
+            SELECT DISTINCT s.id,s.student_number,s.first_name,s.last_name,s.course
+            FROM students s JOIN session_candidates c ON c.student_id=s.id
+            JOIN examination_sessions es ON es.id=c.session_id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY s.student_number
+        """, uid).fetchall()
+        units = connection.execute("""
+            SELECT DISTINCT u.* FROM academic_units u
+            JOIN examination_sessions es ON es.unit_id=u.id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY u.unit_code
+        """, uid).fetchall()
+        venues = connection.execute("""
+            SELECT DISTINCT v.* FROM venues v
+            JOIN examination_sessions es ON es.venue_id=v.id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY v.venue_code
+        """, uid).fetchall()
+        invigilators = []
+        exams = connection.execute("""
+            SELECT DISTINCT e.id,e.course_code,e.examination_name
+            FROM examinations e JOIN examination_sessions es ON es.examination_id=e.id
+            JOIN session_invigilators si ON si.session_id=es.id
+            JOIN invigilators i ON i.id=si.invigilator_id
+            WHERE i.user_id=? ORDER BY e.examination_name
+        """, uid).fetchall()
+    else:
+        units = connection.execute("SELECT * FROM academic_units ORDER BY unit_code").fetchall()
+        students = connection.execute("""
+            SELECT s.id, s.student_number, s.first_name, s.last_name, s.course
+            FROM students s ORDER BY s.student_number
+        """).fetchall()
+        venues = connection.execute("SELECT * FROM venues WHERE active=1 ORDER BY venue_code").fetchall()
+        invigilators = connection.execute("""
+            SELECT id, employee_number, first_name, last_name
+            FROM invigilators WHERE status='active' ORDER BY employee_number
+        """).fetchall()
+        sessions = connection.execute(session_sql + " ORDER BY es.session_date DESC, es.start_time DESC").fetchall()
+        exams = connection.execute("SELECT id, course_code, examination_name FROM examinations ORDER BY examination_date DESC").fetchall()
     connection.close()
     return render_template("operations_workspace.html", units=units, students=students,
                            venues=venues, invigilators=invigilators, sessions=sessions,
