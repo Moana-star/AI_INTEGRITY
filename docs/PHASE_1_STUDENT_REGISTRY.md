@@ -32,6 +32,8 @@ Admission number is the unique student identifier. EIMS does not infer an instit
 - Each imported student and the import operation receive audit events.
 - The import page displays a row-by-row validation report.
 - A consolidated read-only student record view displays profile information and unit-enrolment history.
+- A guarded SQLite cleanup utility targets only the three explicitly identified demonstration admission numbers. It defaults to dry-run, creates a timestamped backup before applying changes, requires an existing administrator actor, preserves existing audit history, removes only profile/unit-enrolment child rows, and refuses to proceed if any other declared foreign-key dependency exists.
+- No automatic demo-student seeding was found in the inspected application startup path; the three displayed records are stored in the local database and require the controlled cleanup below.
 
 ## Explicit limitations and release gates
 
