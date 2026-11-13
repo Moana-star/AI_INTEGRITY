@@ -2,7 +2,7 @@
 
 ## Current development architecture
 
-The current feature branch uses a modular Flask application with server-rendered Jinja templates and a shared SQLite database.
+The feature branch uses a modular Flask application with server-rendered Jinja templates and a shared database access layer. SQLite is the local-development default; PostgreSQL connections are routed through psycopg using DATABASE_URL and are covered by a dedicated runtime integration job.
 
 ```mermaid
 flowchart TD
@@ -15,7 +15,7 @@ flowchart TD
     APP --> CASE[Incident Case Review]
     APP --> EVID[Private Evidence Storage]
     APP --> PORTAL[Student Self-Service]
-    REG --> DB[(SQLite Database)]
+    REG --> DB[(Shared DB adapter)]
     OPS --> DB
     ATT --> DB
     CASE --> DB
@@ -33,7 +33,7 @@ flowchart TD
 | `modules/operations.py` | Academic units, enrolments, venues, examination sessions, candidate lists, seat labels, invigilator assignments and attendance |
 | `modules/integrity.py` | Incident case workflow, review history, evidence upload/download and evidence audit events |
 | `modules/student_portal.py` | Student account provisioning, authentication, academic/exam views, password change and incident responses |
-| `database/database.py` | Existing SQLite schema creation and optional synthetic demonstration seeding |
+| `database/database.py` | Empty-first local schema initialization; synthetic seed data requires explicit `--demo` |
 | `templates/` | Server-rendered user interfaces |
 | `static/` | CSS and browser-side JavaScript |
 
@@ -52,9 +52,9 @@ flowchart TD
 
 ## Database strategy
 
-The current feature branch is still SQLite-based. New tables are created additively and use foreign keys and uniqueness constraints where practical. Existing student, examination and incident tables are preserved.
+All application modules now obtain connections through `modules/database.py`. SQLite remains the default when DATABASE_URL is unset; a PostgreSQL URL selects psycopg. The adapter translates the SQLite-compatible query patterns used by the application, and module schema initialization is exercised against PostgreSQL in CI.
 
-SQLite is suitable for local development and controlled functional testing. It is not the approved final database for a multi-user university deployment. A PostgreSQL migration requires a deliberate data migration, transaction/concurrency review, backup and rollback plan, and end-to-end regression testing.
+PostgreSQL runtime support is under active validation and must not be considered production-certified until full role-based E2E, concurrency, backup/restore, security and institutional acceptance gates pass. The tested migration utility copies a consistent SQLite snapshot; production cutover still requires rehearsals and a rollback plan.
 
 ## Identity verification boundary
 
