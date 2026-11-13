@@ -69,6 +69,29 @@ def validate_source(source_path: Path):
                 "SQLite virtual tables require a separately designed PostgreSQL equivalent: "
                 + repr([row[0] for row in virtual_tables])
             )
+        unsupported_indexes = []
+        for (table_name,) in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ):
+            escaped_table = table_name.replace('"', '""')
+            for index_row in connection.execute(f'PRAGMA index_list("{escaped_table}")'):
+                index_name = index_row[1]
+                is_partial = len(index_row) > 4 and bool(index_row[4])
+                escaped_index = index_name.replace('"', '""')
+                index_columns = connection.execute(
+                    f'PRAGMA index_xinfo("{escaped_index}")'
+                ).fetchall()
+                has_expression = any(
+                    len(column) > 5 and column[5] and column[1] < 0
+                    for column in index_columns
+                )
+                if is_partial or has_expression:
+                    unsupported_indexes.append((table_name, index_name, is_partial, has_expression))
+        if unsupported_indexes:
+            raise RuntimeError(
+                "Partial or expression indexes need explicit PostgreSQL definitions before migration: "
+                + repr(unsupported_indexes)
+            )
         triggers = connection.execute(
             "SELECT name, tbl_name, sql FROM sqlite_master WHERE type='trigger' ORDER BY name"
         ).fetchall()
