@@ -43,7 +43,7 @@
   {% for v in venues %}
   <section class="panel form-panel">
     <h2>{{ v.venue_code }} — {{ v.room_name }}</h2>
-    <p class="muted">{{ v.building or 'Building not recorded' }} · {{ v.capacity }} seats · {% if v.active %}Active{% else %}Closed{% endif %} · Layout version {{ v.current_layout_version_id or 'not configured' }}</p>
+    <p class="muted">{{ v.building or 'Building not recorded' }} · {{ v.capacity }} seats · {% if v.active %}Active{% else %}Closed{% endif %} · Layout version {% if v.current_layout_version_number %}v{{ v.current_layout_version_number }}{% else %}not configured{% endif %} · <a href="{{ url_for('venue_management.venue_history', venue_id=v.id) }}">Venue history</a></p>
     <form method="post" action="{{ url_for('venue_management.change_capacity', venue_id=v.id) }}" class="stack-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>New maximum capacity<input name="capacity" type="number" min="1" max="10000" value="{{ v.capacity }}" required></label>
