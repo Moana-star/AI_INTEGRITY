@@ -14,7 +14,7 @@ import re
 import sqlite3
 from datetime import date, datetime
 from flask import Blueprint, abort, flash, make_response, redirect, render_template, request, session, url_for
-from modules.database import get_connection
+from modules.database import get_connection, is_postgres
 from modules.institutional_registry import ensure_schema as ensure_registry_schema
 from modules.integrity import ensure_schema as ensure_integrity_schema
 
@@ -179,9 +179,11 @@ def ensure_schema():
     """)
     # Upgrade legacy attendance event constraint to allow provider-backed biometric events.
     # Preserve every existing event; no attendance history is discarded.
-    event_sql = connection.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_events'"
-    ).fetchone()
+    event_sql = None
+    if not is_postgres():
+        event_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_events'"
+        ).fetchone()
     if event_sql and "'biometric'" not in (event_sql["sql"] or ""):
         connection.commit()
         connection.execute("PRAGMA foreign_keys = OFF")
