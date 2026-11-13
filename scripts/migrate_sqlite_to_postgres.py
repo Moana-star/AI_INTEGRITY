@@ -227,16 +227,22 @@ def migrate(source_path: Path, database_url: str, apply: bool, confirm_empty: bo
                         target.execute(table.insert(), [dict(row._mapping) for row in batch])
             install_immutable_history_guards(target, set(source_tables))
             reset_identity_sequences(target, source_metadata)
+            # Verify before COMMIT so a mismatch rolls back schema and data.
+            target_counts = {
+                table.name: target.execute(
+                    select(func.count()).select_from(table)
+                ).scalar_one()
+                for table in source_metadata.sorted_tables
+            }
+            mismatches = {
+                name: (counts[name], target_counts.get(name))
+                for name in counts
+                if counts[name] != target_counts.get(name)
+            }
+            if mismatches:
+                raise RuntimeError(f"Pre-commit row-count verification failed: {mismatches}")
 
-        target_counts = table_counts(target_engine, source_tables)
-        mismatches = {
-            name: (counts[name], target_counts.get(name))
-            for name in counts
-            if counts[name] != target_counts.get(name)
-        }
-        if mismatches:
-            raise RuntimeError(f"Post-migration row-count verification failed: {mismatches}")
-        print("Migration copy completed and row counts match.")
+        print("Migration copy committed and row counts matched inside the transaction.")
         print("Run application-level PostgreSQL integration tests before any cutover.")
     finally:
         source_engine.dispose()
