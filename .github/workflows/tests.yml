@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "feature/institutional-eims-foundation", "feature/eims-institutional-completion", "feature/eims-phase-2-examination-management"]
   pull_request:
-    branches: ["main", "feature/institutional-eims-foundation", "feature/eims-phase-2-examination-management"]
+    branches: ["main", "feature/institutional-eims-foundation", "feature/eims-institutional-completion", "feature/eims-phase-2-examination-management"]
 
 jobs:
   test:
