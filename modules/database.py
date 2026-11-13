@@ -202,6 +202,9 @@ class PostgresConnection:
                 statement = token.group("statement").strip().rstrip(";").strip()
                 if statement:
                     self.execute(statement)
+        # Match sqlite3.executescript semantics: schema script statements are
+        # committed independently of later request-level DML transactions.
+        self.raw.commit()
         return None
 
     def commit(self):
