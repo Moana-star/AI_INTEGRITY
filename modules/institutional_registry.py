@@ -314,6 +314,62 @@ def edit_student(student_id):
         return render_template("student_registry_form.html", student=student, error=message)
 
 
+def _validate_student_csv(raw, connection):
+    """Validate the complete CSV before writing any student rows.
+
+    Returns (valid_rows, row_errors). A single invalid row blocks the whole
+    import so an operator cannot mistake a partial import for a complete one.
+    """
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise ValueError("The file must be a UTF-8 CSV.")
+
+    reader = csv.DictReader(io.StringIO(text))
+    headers = {header.strip() for header in (reader.fieldnames or []) if header and header.strip()}
+    missing = CSV_FIELDS - headers
+    if missing:
+        raise ValueError("Missing CSV columns: " + ", ".join(sorted(missing)))
+    if not reader.fieldnames:
+        raise ValueError("The CSV file is empty or has no header row.")
+
+    valid_rows = []
+    row_errors = []
+    seen_admissions = set()
+    seen_emails = set()
+    for row_number, row in enumerate(reader, start=2):
+        if None in row:
+            row_errors.append({"row": row_number, "message": "The row contains more values than the header."})
+            continue
+        normalized = {str(key).strip(): (value or "").strip()
+                      for key, value in row.items() if key}
+        try:
+            values = _student_values(normalized)
+            admission, email = values[0], values[7]
+            if admission in seen_admissions:
+                raise ValueError("Duplicate admission number within this CSV.")
+            if email and email in seen_emails:
+                raise ValueError("Duplicate institutional email within this CSV.")
+            if connection.execute(
+                "SELECT 1 FROM students WHERE student_number=?", (admission,)
+            ).fetchone():
+                raise ValueError("Admission number already exists in the registry.")
+            if email and connection.execute(
+                "SELECT 1 FROM student_profiles WHERE lower(institutional_email)=lower(?)",
+                (email,),
+            ).fetchone():
+                raise ValueError("Institutional email already exists in the registry.")
+            seen_admissions.add(admission)
+            if email:
+                seen_emails.add(email)
+            valid_rows.append(values)
+        except (ValueError, sqlite3.IntegrityError) as error:
+            row_errors.append({"row": row_number, "message": str(error)})
+    if not valid_rows and not row_errors:
+        row_errors.append({"row": 0, "message": "The CSV contains no student data rows."})
+    return valid_rows, row_errors
+
+
 @registry_bp.route("/students/import", methods=["GET", "POST"])
 def import_students():
     if request.method == "GET":
