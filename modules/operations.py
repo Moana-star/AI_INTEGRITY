@@ -1024,6 +1024,39 @@ def update_session_status(session_id):
         connection.close()
     return redirect(url_for("operations.workspace"))
 
+@operations_bp.get("/sessions/<int:session_id>/history")
+def session_schedule_history(session_id):
+    if not _require_admin():
+        abort(403)
+    connection = db()
+    exam_session = connection.execute("""
+        SELECT es.session_code, es.session_date, es.start_time, es.end_time,
+               es.status, e.course_code, e.examination_name
+        FROM examination_sessions es
+        JOIN examinations e ON e.id=es.examination_id
+        WHERE es.id=?
+    """, (session_id,)).fetchone()
+    if not exam_session:
+        connection.close()
+        abort(404)
+    history = connection.execute("""
+        SELECT h.*, old_venue.venue_code AS old_venue_code,
+               new_venue.venue_code AS new_venue_code, u.username AS actor_username
+        FROM examination_session_schedule_history h
+        LEFT JOIN venues old_venue ON old_venue.id=h.old_venue_id
+        LEFT JOIN venues new_venue ON new_venue.id=h.new_venue_id
+        LEFT JOIN users u ON u.id=h.actor_user_id
+        WHERE h.session_id=?
+        ORDER BY h.created_at DESC, h.id DESC
+    """, (session_id,)).fetchall()
+    connection.close()
+    return render_template(
+        "session_schedule_history.html",
+        exam_session=exam_session,
+        history=history,
+    )
+
+
 @operations_bp.get("/sessions/<int:session_id>/attendance")
 def attendance(session_id):
     if session.get("role") not in {"admin","examination_officer","invigilator"}:
