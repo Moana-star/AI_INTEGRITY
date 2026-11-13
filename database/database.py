@@ -257,10 +257,10 @@ def provision_initial_administrator(cursor):
     password = os.environ.get("EIMS_BOOTSTRAP_ADMIN_PASSWORD") or ""
     if not username and not password:
         return False
-    if not username or len(username) < 3 or len(password) < 16:
+    if not username or len(username) < 3 or len(password) < 8:
         raise RuntimeError(
             "Set EIMS_BOOTSTRAP_ADMIN_USERNAME and EIMS_BOOTSTRAP_ADMIN_PASSWORD "
-            "(at least 16 characters) together to provision the initial administrator."
+            "(at least 8 characters) together to provision the initial administrator."
         )
     existing = cursor.execute(
         "SELECT id FROM users WHERE username = ?", (username,)
