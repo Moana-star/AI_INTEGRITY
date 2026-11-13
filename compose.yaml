@@ -37,7 +37,7 @@ services:
     environment:
       FLASK_ENV: production
       FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY in .env}
-      FLASK_HTTPS: "0"
+      FLASK_HTTPS: ${FLASK_HTTPS:-0}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       RATELIMIT_STORAGE_URI: redis://redis:6379/0
       EIMS_BOOTSTRAP_ADMIN_USERNAME: ${EIMS_BOOTSTRAP_ADMIN_USERNAME:?Set initial admin username in .env}
