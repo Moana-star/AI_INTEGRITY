@@ -727,7 +727,13 @@ def admin_incidents():
 
 @app.route("/admin/incidents/add", methods=["GET", "POST"])
 def add_incident():
-    if not admin_required() and not invigilator_required():
+    # The legacy incident form exposes a broad student selector and is not
+    # candidate/session scoped. Invigilators must use the newer session-bound
+    # operations workflow, which validates their assignment and candidate list.
+    if invigilator_required():
+        flash("Report examination incidents from your assigned examination session.", "info")
+        return redirect(url_for("operations.workspace"))
+    if not admin_required():
         return redirect(url_for("login"))
 
     connection = get_db_connection()
