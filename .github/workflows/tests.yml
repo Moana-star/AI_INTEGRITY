@@ -40,3 +40,53 @@ jobs:
         run: python -m compileall -q app.py modules database tests
       - name: Run unit tests
         run: python -m unittest discover -v
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install application and browser test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Initialize isolated synthetic test database
+        env:
+          DEMO_ADMIN_PASSWORD: ci-only-admin-password-not-used-for-login
+          DEMO_INVIGILATOR_PASSWORD: ci-only-invigilator-password-not-used-for-login
+        run: python database/database.py
+      - name: Start Flask application
+        env:
+          FLASK_SECRET_KEY: ci-only-random-test-secret
+          FLASK_DEBUG: "0"
+        run: |
+          nohup python app.py > /tmp/eims-browser.log 2>&1 &
+          echo $! > /tmp/eims-browser.pid
+      - name: Wait for application readiness
+        run: |
+          python - <<'PY'
+          import time
+          import urllib.error
+          import urllib.request
+          for attempt in range(40):
+              try:
+                  urllib.request.urlopen("http://127.0.0.1:5000/healthz", timeout=2)
+                  break
+              except (urllib.error.URLError, TimeoutError):
+                  time.sleep(1)
+          else:
+              raise SystemExit("EIMS did not become ready; inspect /tmp/eims-browser.log")
+          PY
+      - name: Run real Chromium browser smoke tests
+        env:
+          EIMS_BROWSER_BASE_URL: http://127.0.0.1:5000
+        run: python -m unittest discover -s tests/browser -v
+      - name: Print server log on failure
+        if: failure()
+        run: cat /tmp/eims-browser.log
