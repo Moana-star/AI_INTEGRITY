@@ -73,7 +73,7 @@ class StaffAuthenticationTests(unittest.TestCase):
         # is checked against the human-readable label.
         self.assertRegex(
             response.data.decode("utf-8"),
-            r"<tr>\\s*<td>admin</td>\\s*<td>admin</td>\\s*<td>Administrator</td>\\s*</tr>",
+            r"<tr>\s*<td>admin</td>\s*<td>admin</td>\s*<td>Administrator</td>\s*</tr>",
         )
 
     def test_registrar_account_can_sign_in_to_registry_workspace(self):
