@@ -172,7 +172,7 @@ class PostgresConnection:
         token_pattern = re.compile(
             r"(?P<trigger>CREATE\s+TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?\w+"
             r".*?BEGIN\s+SELECT\s+RAISE\(ABORT,\s*'[^']*'\);\s*END\s*;)"
-            r"|(?P<statement>[^;]+;)",
+            r"|(?P<statement>\\s*[^;]+;)",
             re.I | re.S,
         )
         for token in token_pattern.finditer(script):
