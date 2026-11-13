@@ -107,28 +107,9 @@ def ensure_schema():
         BEFORE DELETE ON academic_history_events
         BEGIN SELECT RAISE(ABORT, 'Academic history events are append-only'); END;
 
-        CREATE TABLE IF NOT EXISTS examination_attendance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            examination_id INTEGER NOT NULL,
-            student_id INTEGER NOT NULL,
-            attendance_status TEXT NOT NULL DEFAULT 'present'
-                CHECK (attendance_status IN ('present','absent','late','disputed')),
-            verification_method TEXT NOT NULL DEFAULT 'manual'
-                CHECK (verification_method IN ('manual','student_card','biometric_provider')),
-            verification_status TEXT NOT NULL DEFAULT 'manual_review'
-                CHECK (verification_status IN ('not_attempted','verified','failed','manual_review')),
-            check_in_at TIMESTAMP,
-            check_out_at TIMESTAMP,
-            invigilator_id INTEGER,
-            device_identifier TEXT,
-            override_reason TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (examination_id, student_id),
-            FOREIGN KEY (examination_id) REFERENCES examinations(id) ON DELETE CASCADE,
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-            FOREIGN KEY (invigilator_id) REFERENCES invigilators(id)
-        );
+        -- Deprecated legacy examination_attendance storage is intentionally
+        -- not created for new installations. Existing tables and rows are
+        -- left untouched until a separately reviewed archival migration.
     """)
     connection.close()
 
